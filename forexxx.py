@@ -72,24 +72,23 @@ def generate_signal(data, indicator):
         if data.empty or "Close" not in data.columns:
             raise ValueError("Data is empty or invalid for signal generation.")
 
-        # Ensure the 'Close' column is a pandas Series
         close_series = data["Close"]
 
         if indicator == "SMA (10/50)":
-            sma10 = SMAIndicator(close_series, window=10).sma_indicator()
-            sma50 = SMAIndicator(close_series, window=50).sma_indicator()
-            data["Indicator1"] = pd.Series(sma10, index=data.index)
-            data["Indicator2"] = pd.Series(sma50, index=data.index)
+            sma10 = pd.Series(SMAIndicator(close_series, window=10).sma_indicator()).squeeze()
+            sma50 = pd.Series(SMAIndicator(close_series, window=50).sma_indicator()).squeeze()
+            data["Indicator1"] = sma10
+            data["Indicator2"] = sma50
             signal_condition = data["Indicator1"].iloc[-1] > data["Indicator2"].iloc[-1]
         elif indicator == "EMA (10/50)":
-            ema10 = EMAIndicator(close_series, window=10).ema_indicator()
-            ema50 = EMAIndicator(close_series, window=50).ema_indicator()
-            data["Indicator1"] = pd.Series(ema10, index=data.index)
-            data["Indicator2"] = pd.Series(ema50, index=data.index)
+            ema10 = pd.Series(EMAIndicator(close_series, window=10).ema_indicator()).squeeze()
+            ema50 = pd.Series(EMAIndicator(close_series, window=50).ema_indicator()).squeeze()
+            data["Indicator1"] = ema10
+            data["Indicator2"] = ema50
             signal_condition = data["Indicator1"].iloc[-1] > data["Indicator2"].iloc[-1]
         elif indicator == "RSI (14)":
-            rsi = RSIIndicator(close_series, window=14).rsi()
-            data["RSI"] = pd.Series(rsi, index=data.index)
+            rsi = pd.Series(RSIIndicator(close_series, window=14).rsi()).squeeze()
+            data["RSI"] = rsi
             signal_condition = data["RSI"].iloc[-1] < 30  # Buy signal when RSI is oversold
 
         last_close = data["Close"].iloc[-1]
