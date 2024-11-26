@@ -6,19 +6,18 @@ import mplfinance as mpf
 from ta.trend import SMAIndicator, EMAIndicator
 from ta.momentum import RSIIndicator
 from matplotlib.dates import DateFormatter, AutoDateLocator
-from forex_python.converter import CurrencyRates
-from datetime import datetime, timedelta
+import yfinance as yf
 
 # Currency Pair Selection
 currency_pairs = {
-    "XAUUSD": ("XAU", "USD"),
-    "EURUSD": ("EUR", "USD"),
-    "GBPUSD": ("GBP", "USD"),
-    "USDJPY": ("USD", "JPY"),
-    "AUDUSD": ("AUD", "USD"),
-    "NZDUSD": ("NZD", "USD"),
-    "USDCAD": ("USD", "CAD"),
-    "USDCHF": ("USD", "CHF"),
+    "XAUUSD": "XAUUSD=X",
+    "EURUSD": "EURUSD=X",
+    "GBPUSD": "GBPUSD=X",
+    "USDJPY": "USDJPY=X",
+    "AUDUSD": "AUDUSD=X",
+    "NZDUSD": "NZDUSD=X",
+    "USDCAD": "USDCAD=X",
+    "USDCHF": "USDCHF=X",
 }
 
 # Streamlit Sidebar
@@ -32,27 +31,17 @@ account_balance = st.sidebar.number_input("Account Balance (USD)", min_value=0.0
 risk_percentage = st.sidebar.slider("Risk Percentage (%)", min_value=0.0, max_value=10.0, value=2.0, step=0.1)
 risk_reward_ratio = st.sidebar.slider("Risk/Reward Ratio", min_value=1.0, max_value=5.0, value=2.0, step=0.1)
 
-# Fetch real-time forex data using forex-python
+# Fetch real-time forex data using yfinance
 @st.cache_data
-def fetch_forex_data(base_currency, quote_currency):
+def fetch_forex_data_yfinance(pair):
     try:
-        c = CurrencyRates()
-        current_time = datetime.now()
-        start_time = current_time - timedelta(days=5)
-        
-        # Generate dummy historical data using static rates
-        timestamps = pd.date_range(start=start_time, end=current_time, freq="15min")
-        rates = [c.get_rate(base_currency, quote_currency) for _ in range(len(timestamps))]
-        
-        df = pd.DataFrame({
-            "Datetime": timestamps,
-            "Close": rates,
-        })
-        df["Open"] = df["Close"] + np.random.randn(len(df)) * 0.01
-        df["High"] = df[["Close", "Open"]].max(axis=1) + np.random.rand(len(df)) * 0.02
-        df["Low"] = df[["Close", "Open"]].min(axis=1) - np.random.rand(len(df)) * 0.02
-        df.set_index("Datetime", inplace=True)
-        return df
+        data = yf.download(tickers=pair, period="5d", interval="15m", progress=False)
+        if data.empty:
+            raise ValueError("No data fetched for the selected currency pair.")
+        data = data.rename(columns={"Open": "Open", "High": "High", "Low": "Low", "Close": "Close"})
+        data.reset_index(inplace=True)
+        data.set_index("Datetime", inplace=True)
+        return data
     except Exception as e:
         st.error(f"Error fetching forex data: {e}")
         return pd.DataFrame()
@@ -118,9 +107,9 @@ def plot_chart(data, signal, entry_price, stop_loss, take_profit):
 # Main Execution
 st.title("Forex Trade Signal Generator")
 
-base_currency, quote_currency = currency_pairs[selected_pair]
 st.write(f"Fetching data for {selected_pair}...")
-data = fetch_forex_data(base_currency, quote_currency)
+ticker_symbol = currency_pairs[selected_pair]
+data = fetch_forex_data_yfinance(ticker_symbol)
 
 if not data.empty:
     try:
