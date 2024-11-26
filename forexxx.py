@@ -1,8 +1,9 @@
+import streamlit as st
 import yfinance as yf
 import pandas as pd
 import matplotlib.pyplot as plt
-from matplotlib.dates import DateFormatter, AutoDateLocator
 import mplfinance as mpf
+from matplotlib.dates import DateFormatter, AutoDateLocator
 
 # Currency Pair Selection
 currency_pairs = {
@@ -16,19 +17,14 @@ currency_pairs = {
     "USDCHF": "USDCHF=X",  # USD to Swiss Franc Forex
 }
 
-# User Inputs
-print("Available Currency Pairs: XAUUSD, EURUSD, GBPUSD, USDJPY, AUDUSD, NZDUSD, USDCAD, USDCHF")
-selected_pair = input("Select Currency Pair: ").strip().upper()
-if selected_pair not in currency_pairs:
-    raise ValueError("Invalid currency pair selected.")
-ticker_symbol = currency_pairs[selected_pair]
+# Streamlit Sidebar
+st.sidebar.title("Trade Signal Generator")
+selected_pair = st.sidebar.selectbox("Select Currency Pair", options=list(currency_pairs.keys()))
+account_balance = st.sidebar.number_input("Account Balance (USD)", min_value=0.0, value=1000.0, step=100.0)
+risk_percentage = st.sidebar.slider("Risk Percentage (%)", min_value=0.0, max_value=10.0, value=2.0, step=0.1)
+risk_reward_ratio = st.sidebar.slider("Risk/Reward Ratio", min_value=1.0, max_value=5.0, value=2.0, step=0.1)
 
-try:
-    account_balance = float(input("Enter Account Balance (USD): "))
-    risk_percentage = float(input("Enter Risk Percentage (0-10%): "))
-    risk_reward_ratio = float(input("Enter Risk/Reward Ratio (e.g., 2): "))
-except ValueError:
-    raise ValueError("Invalid input for account balance, risk percentage, or risk/reward ratio.")
+ticker_symbol = currency_pairs[selected_pair]
 
 # Function to calculate lot size
 def calculate_lot_size(balance, risk_percent, entry_price, stop_loss):
@@ -42,13 +38,15 @@ def calculate_lot_size(balance, risk_percent, entry_price, stop_loss):
     return round(lot_size, 2)
 
 # Fetch historical data using yfinance
+@st.cache_data
 def fetch_data(symbol, period="5d", interval="15m"):
     try:
         data = yf.download(tickers=symbol, period=period, interval=interval, progress=False)
         data.reset_index(inplace=True)
         return data
     except Exception as e:
-        raise RuntimeError(f"Error fetching data: {e}")
+        st.error(f"Error fetching data: {e}")
+        return pd.DataFrame()
 
 # Generate Trade Signal
 def generate_signal(data):
@@ -86,10 +84,12 @@ def plot_chart(data, signal, entry_price, stop_loss, take_profit):
     ax.xaxis.set_major_locator(AutoDateLocator())
     ax.xaxis.set_major_formatter(DateFormatter("%Y-%m-%d %H:%M"))
     fig.autofmt_xdate()
-    plt.show()
+    st.pyplot(fig)
 
 # Main Execution
-print(f"Fetching data for {selected_pair}...")
+st.title("Forex Trade Signal Generator")
+
+st.write(f"Fetching data for {selected_pair}...")
 data = fetch_data(ticker_symbol, period="5d", interval="15m")
 
 if not data.empty:
@@ -98,17 +98,17 @@ if not data.empty:
     take_profit = float(entry_price + (entry_price - stop_loss) * risk_reward_ratio)
     lot_size = calculate_lot_size(account_balance, risk_percentage, entry_price, stop_loss)
 
-    print(f"\nTrade Signal for {selected_pair}")
-    print(f"Signal: {signal}")
-    print(f"Entry Price: {entry_price}")
-    print(f"Stop Loss: {stop_loss}")
-    print(f"Take Profit: {take_profit}")
-    print(f"Lot Size: {lot_size}\n")
+    st.write(f"### Trade Signal for {selected_pair}")
+    st.write(f"- Signal: **{signal}**")
+    st.write(f"- Entry Price: **{entry_price:.2f}**")
+    st.write(f"- Stop Loss: **{stop_loss:.2f}**")
+    st.write(f"- Take Profit: **{take_profit:.2f}**")
+    st.write(f"- Lot Size: **{lot_size:.2f}**")
 
     cumulative_strategy_return, backtest_data = backtest_strategy(data)
-    print("Backtest Performance:")
-    print(cumulative_strategy_return.tail())
+    st.write("### Backtest Performance")
+    st.line_chart(cumulative_strategy_return)
 
     plot_chart(data, signal, entry_price, stop_loss, take_profit)
 else:
-    print("Failed to fetch data for the selected pair.")
+    st.error("Failed to fetch data for the selected pair.")
