@@ -72,22 +72,23 @@ def generate_signal(data, indicator):
         if data.empty or "Close" not in data.columns:
             raise ValueError("Data is empty or invalid for signal generation.")
 
+        # Ensure the 'Close' column is a pandas Series
         close_series = data["Close"]
 
         if indicator == "SMA (10/50)":
-            sma10 = pd.Series(SMAIndicator(close_series, window=10).sma_indicator()).squeeze()
-            sma50 = pd.Series(SMAIndicator(close_series, window=50).sma_indicator()).squeeze()
+            sma10 = pd.Series(SMAIndicator(close_series, window=10).sma_indicator().values.flatten(), index=data.index)
+            sma50 = pd.Series(SMAIndicator(close_series, window=50).sma_indicator().values.flatten(), index=data.index)
             data["Indicator1"] = sma10
             data["Indicator2"] = sma50
             signal_condition = data["Indicator1"].iloc[-1] > data["Indicator2"].iloc[-1]
         elif indicator == "EMA (10/50)":
-            ema10 = pd.Series(EMAIndicator(close_series, window=10).ema_indicator()).squeeze()
-            ema50 = pd.Series(EMAIndicator(close_series, window=50).ema_indicator()).squeeze()
+            ema10 = pd.Series(EMAIndicator(close_series, window=10).ema_indicator().values.flatten(), index=data.index)
+            ema50 = pd.Series(EMAIndicator(close_series, window=50).ema_indicator().values.flatten(), index=data.index)
             data["Indicator1"] = ema10
             data["Indicator2"] = ema50
             signal_condition = data["Indicator1"].iloc[-1] > data["Indicator2"].iloc[-1]
         elif indicator == "RSI (14)":
-            rsi = pd.Series(RSIIndicator(close_series, window=14).rsi()).squeeze()
+            rsi = pd.Series(RSIIndicator(close_series, window=14).rsi().values.flatten(), index=data.index)
             data["RSI"] = rsi
             signal_condition = data["RSI"].iloc[-1] < 30  # Buy signal when RSI is oversold
 
