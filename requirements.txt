@@ -4,4 +4,4 @@ numpy
 matplotlib
 mplfinance
 ta
-alpha_vantage
+forex-python
