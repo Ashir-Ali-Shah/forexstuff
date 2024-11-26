@@ -55,6 +55,8 @@ def fetch_forex_data_fallback(base_currency, quote_currency):
     try:
         c = CurrencyRates()
         current_rate = c.get_rate(base_currency, quote_currency)
+        if not current_rate:
+            raise ValueError("Invalid currency pair or no data available.")
         timestamps = pd.date_range(end=pd.Timestamp.now(), periods=96, freq="15min")
         rates = [current_rate + np.random.uniform(-0.01, 0.01) for _ in timestamps]
         data = pd.DataFrame({
@@ -66,9 +68,26 @@ def fetch_forex_data_fallback(base_currency, quote_currency):
         })
         data.set_index("Datetime", inplace=True)
         return data
+    except ValueError as ve:
+        st.error(f"Value Error: {ve}")
+        return generate_dummy_data()
     except Exception as e:
         st.error(f"Error fetching fallback forex data: {e}")
-        return pd.DataFrame()
+        return generate_dummy_data()
+
+# Generate dummy data if all else fails
+def generate_dummy_data():
+    timestamps = pd.date_range(end=pd.Timestamp.now(), periods=96, freq="15min")
+    rates = [100 + np.random.uniform(-1, 1) for _ in timestamps]
+    data = pd.DataFrame({
+        "Datetime": timestamps,
+        "Close": rates,
+        "Open": rates + np.random.uniform(-0.5, 0.5, len(rates)),
+        "High": rates + np.random.uniform(0.5, 1, len(rates)),
+        "Low": rates - np.random.uniform(0.5, 1, len(rates)),
+    })
+    data.set_index("Datetime", inplace=True)
+    return data
 
 # Function to calculate lot size
 def calculate_lot_size(balance, risk_percent, entry_price, stop_loss):
