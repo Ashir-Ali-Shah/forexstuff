@@ -10,17 +10,25 @@ currency_pairs = {
     "EURUSD": "EURUSD=X",  # Euro to USD Forex
     "GBPUSD": "GBPUSD=X",  # British Pound to USD Forex
     "USDJPY": "USDJPY=X",  # USD to Japanese Yen Forex
+    "AUDUSD": "AUDUSD=X",  # Australian Dollar to USD Forex
+    "NZDUSD": "NZDUSD=X",  # New Zealand Dollar to USD Forex
+    "USDCAD": "USDCAD=X",  # USD to Canadian Dollar Forex
+    "USDCHF": "USDCHF=X",  # USD to Swiss Franc Forex
 }
 
 # User Inputs
-selected_pair = input("Select Currency Pair (XAUUSD, EURUSD, GBPUSD, USDJPY): ")
+print("Available Currency Pairs: XAUUSD, EURUSD, GBPUSD, USDJPY, AUDUSD, NZDUSD, USDCAD, USDCHF")
+selected_pair = input("Select Currency Pair: ").strip().upper()
 if selected_pair not in currency_pairs:
     raise ValueError("Invalid currency pair selected.")
 ticker_symbol = currency_pairs[selected_pair]
 
-account_balance = float(input("Enter Account Balance (USD): "))
-risk_percentage = float(input("Enter Risk Percentage (0-10%): "))
-risk_reward_ratio = float(input("Enter Risk/Reward Ratio (e.g., 2): "))
+try:
+    account_balance = float(input("Enter Account Balance (USD): "))
+    risk_percentage = float(input("Enter Risk Percentage (0-10%): "))
+    risk_reward_ratio = float(input("Enter Risk/Reward Ratio (e.g., 2): "))
+except ValueError:
+    raise ValueError("Invalid input for account balance, risk percentage, or risk/reward ratio.")
 
 # Function to calculate lot size
 def calculate_lot_size(balance, risk_percent, entry_price, stop_loss):
@@ -35,9 +43,12 @@ def calculate_lot_size(balance, risk_percent, entry_price, stop_loss):
 
 # Fetch historical data using yfinance
 def fetch_data(symbol, period="5d", interval="15m"):
-    data = yf.download(tickers=symbol, period=period, interval=interval)
-    data.reset_index(inplace=True)
-    return data
+    try:
+        data = yf.download(tickers=symbol, period=period, interval=interval, progress=False)
+        data.reset_index(inplace=True)
+        return data
+    except Exception as e:
+        raise RuntimeError(f"Error fetching data: {e}")
 
 # Generate Trade Signal
 def generate_signal(data):
@@ -45,7 +56,7 @@ def generate_signal(data):
     long_window = 50
     data["SMA10"] = data["Close"].rolling(window=short_window).mean()
     data["SMA50"] = data["Close"].rolling(window=long_window).mean()
-    
+
     if data["SMA10"].iloc[-1] > data["SMA50"].iloc[-1]:
         return "Buy", data["Close"].iloc[-1]
     else:
