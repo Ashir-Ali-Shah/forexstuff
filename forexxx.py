@@ -13,7 +13,7 @@ st.markdown("# 📈 Forex Trade Signal Generator")
 
 # Currency Pair Selection
 currency_pairs = {
-    "XAUUSD": "XAUUSD=X",
+    "XAUUSD": "GLD",  # Using SPDR Gold Shares ETF as an alternative
     "EURUSD": "EURUSD=X",
     "GBPUSD": "GBPUSD=X",
     "USDJPY": "USDJPY=X",
