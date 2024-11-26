@@ -4,4 +4,4 @@ numpy
 matplotlib
 mplfinance
 ta
-forex-python
+yfinance
