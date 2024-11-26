@@ -7,9 +7,8 @@ from ta.trend import SMAIndicator, EMAIndicator
 from ta.momentum import RSIIndicator
 from matplotlib.dates import DateFormatter, AutoDateLocator
 import yfinance as yf
-from forex_python.converter import CurrencyRates
 
-# App title with emoji
+# App title
 st.markdown("# 📈 Forex Trade Signal Generator")
 
 # Currency Pair Selection
@@ -34,18 +33,16 @@ selected_indicator = st.sidebar.selectbox(
 account_balance = st.sidebar.number_input("💰 Account Balance (USD)", min_value=0.0, value=1000.0, step=100.0)
 risk_percentage = st.sidebar.slider("📉 Risk Percentage (%)", min_value=0.0, max_value=10.0, value=2.0, step=0.1)
 risk_reward_ratio = st.sidebar.slider("🎯 Risk/Reward Ratio", min_value=1.0, max_value=5.0, value=2.0, step=0.1)
-
-st.sidebar.markdown("---")
 chart_type = st.sidebar.radio("📈 Chart Type", options=["Candlestick", "Line Chart"])
 
 # Fetch real-time forex data using yfinance
 @st.cache_data
 def fetch_forex_data(pair):
     try:
+        st.write(f"Fetching data for {pair}...")
         data = yf.download(tickers=pair, period="5d", interval="15m", progress=False)
         if data.empty:
-            st.warning(f"No data fetched for the pair: {pair}.")
-            return pd.DataFrame()
+            raise ValueError(f"No data fetched for the selected pair: {pair}")
         data.reset_index(inplace=True)
         data.rename(columns={"Datetime": "Datetime", "Open": "Open", "High": "High", "Low": "Low", "Close": "Close"}, inplace=True)
         data.set_index("Datetime", inplace=True)
