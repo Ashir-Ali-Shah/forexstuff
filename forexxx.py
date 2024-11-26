@@ -44,6 +44,8 @@ def fetch_forex_data(pair):
         if data.empty:
             raise ValueError(f"No data fetched for the selected pair: {pair}")
         data.reset_index(inplace=True)
+        if "Close" not in data.columns:
+            raise ValueError(f"'Close' column is missing in the data for {pair}")
         data.rename(columns={"Datetime": "Datetime", "Open": "Open", "High": "High", "Low": "Low", "Close": "Close"}, inplace=True)
         data.set_index("Datetime", inplace=True)
         return data
@@ -67,6 +69,9 @@ def calculate_lot_size(balance, risk_percent, entry_price, stop_loss):
 # Generate Trade Signal
 def generate_signal(data, indicator):
     try:
+        if data.empty or "Close" not in data.columns:
+            raise ValueError("Data is empty or invalid for signal generation.")
+
         if indicator == "SMA (10/50)":
             data["Indicator1"] = SMAIndicator(data["Close"], window=10).sma_indicator()
             data["Indicator2"] = SMAIndicator(data["Close"], window=50).sma_indicator()
@@ -80,6 +85,8 @@ def generate_signal(data, indicator):
             signal_condition = data["RSI"].iloc[-1] < 30  # Buy signal when RSI is oversold
 
         last_close = data["Close"].iloc[-1]
+        if pd.isna(last_close):
+            raise ValueError("Last close price is NaN.")
         if signal_condition:
             return "Buy", last_close
         else:
@@ -91,6 +98,9 @@ def generate_signal(data, indicator):
 # Plotting function
 def plot_chart(data, signal, entry_price, stop_loss, take_profit, chart_type):
     try:
+        if data.empty:
+            raise ValueError("Data is empty for charting.")
+
         if chart_type == "Candlestick":
             fig, ax = plt.subplots(figsize=(12, 8))
             mpf.plot(data, type="candle", style="charles", ax=ax, mav=(10, 50), volume=False)
