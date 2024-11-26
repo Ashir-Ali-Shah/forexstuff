@@ -5,4 +5,3 @@ matplotlib
 mplfinance
 ta
 yfinance
-forex-python
