@@ -4,3 +4,4 @@ numpy
 matplotlib
 mplfinance
 ta
+alpha_vantage
