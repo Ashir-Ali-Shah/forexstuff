@@ -35,9 +35,11 @@ risk_reward_ratio = st.sidebar.slider("Risk/Reward Ratio", min_value=1.0, max_va
 @st.cache_data
 def fetch_forex_data_yfinance(pair):
     try:
+        st.write(f"Fetching data for {pair} from Yahoo Finance...")
         data = yf.download(tickers=pair, period="5d", interval="15m", progress=False)
         if data.empty:
-            raise ValueError("No data fetched for the selected currency pair.")
+            st.error(f"No data fetched for the pair: {pair}.")
+            return pd.DataFrame()
         data = data.rename(columns={"Open": "Open", "High": "High", "Low": "Low", "Close": "Close"})
         data.reset_index(inplace=True)
         data.set_index("Datetime", inplace=True)
@@ -107,7 +109,6 @@ def plot_chart(data, signal, entry_price, stop_loss, take_profit):
 # Main Execution
 st.title("Forex Trade Signal Generator")
 
-st.write(f"Fetching data for {selected_pair}...")
 ticker_symbol = currency_pairs[selected_pair]
 data = fetch_forex_data_yfinance(ticker_symbol)
 
