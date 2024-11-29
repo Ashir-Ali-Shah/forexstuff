@@ -78,18 +78,18 @@ def generate_signal(data, indicator):
         if indicator == "SMA (10/50)":
             sma10 = SMAIndicator(close_series, window=10).sma_indicator()
             sma50 = SMAIndicator(close_series, window=50).sma_indicator()
-            data["Indicator1"] = pd.Series(sma10.squeeze(), index=data.index)  # Flatten to 1D
-            data["Indicator2"] = pd.Series(sma50.squeeze(), index=data.index)  # Flatten to 1D
+            data["Indicator1"] = sma10  # Safe to assign directly
+            data["Indicator2"] = sma50  # Safe to assign directly
             signal_condition = data["Indicator1"].iloc[-1] > data["Indicator2"].iloc[-1]
         elif indicator == "EMA (10/50)":
             ema10 = EMAIndicator(close_series, window=10).ema_indicator()
             ema50 = EMAIndicator(close_series, window=50).ema_indicator()
-            data["Indicator1"] = pd.Series(ema10.squeeze(), index=data.index)  # Flatten to 1D
-            data["Indicator2"] = pd.Series(ema50.squeeze(), index=data.index)  # Flatten to 1D
+            data["Indicator1"] = ema10  # Safe to assign directly
+            data["Indicator2"] = ema50  # Safe to assign directly
             signal_condition = data["Indicator1"].iloc[-1] > data["Indicator2"].iloc[-1]
         elif indicator == "RSI (14)":
             rsi = RSIIndicator(close_series, window=14).rsi()
-            data["RSI"] = pd.Series(rsi.squeeze(), index=data.index)  # Flatten to 1D
+            data["RSI"] = rsi  # Safe to assign directly
             signal_condition = data["RSI"].iloc[-1] < 30  # Buy signal when RSI is oversold
 
         last_close = data["Close"].iloc[-1]
