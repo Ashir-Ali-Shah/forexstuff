@@ -1,10 +1,6 @@
 streamlit
-pandas
-numpy
-matplotlib
 yfinance
-backtrader
+pandas
 plotly
 ta
-time
-datetime
+numpy
