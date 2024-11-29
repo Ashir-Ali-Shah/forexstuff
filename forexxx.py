@@ -1,8 +1,6 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
 import matplotlib.pyplot as plt
-from forex_python.converter import CurrencyRates
 import requests
 import time
 
@@ -31,66 +29,74 @@ account_balance = st.sidebar.number_input("💰 Account Balance (USD)", min_valu
 risk_percentage = st.sidebar.slider("📉 Risk Percentage (%)", min_value=0.0, max_value=10.0, value=2.0, step=0.1)
 risk_reward_ratio = st.sidebar.slider("🎯 Risk/Reward Ratio", min_value=1.0, max_value=5.0, value=2.0, step=0.1)
 
-# Initialize forex-python converters
-currency_converter = CurrencyRates()
+# Alpha Vantage API key provided
+ALPHA_VANTAGE_API_KEY = "GQN1R1CGXAO32GI3"  # Your provided API key
 
-# Fetch live exchange rate with retries and error handling
+# Fetch live exchange rate using Alpha Vantage API
 def fetch_live_rate(pair):
     try:
         base, quote = currency_pairs[pair]
-        rate = currency_converter.get_rate(base, quote)
-        if rate is None:
-            raise ValueError("API returned no rate for the given currency pair.")
-        return rate
-    except Exception as e:
-        st.error(f"Error fetching live exchange rate with forex-python: {e}")
-        # Fallback to alternative API if forex-python fails
-        return fetch_live_rate_alternative(pair)
-
-# Alternative: Use ExchangeRate-API (Backup Plan)
-def fetch_live_rate_alternative(pair):
-    try:
-        base, quote = currency_pairs[pair]
-        api_key = "YOUR_EXCHANGERATE_API_KEY"  # Replace with your ExchangeRate-API key
-        url = f"https://v6.exchangerate-api.com/v6/{api_key}/latest/{base}"
-        response = requests.get(url)
-        response.raise_for_status()  # Raise an HTTPError for bad responses
+        url = f"https://www.alphavantage.co/query"
+        params = {
+            "function": "FX_INTRADAY",
+            "from_symbol": base,
+            "to_symbol": quote,
+            "interval": "15min",
+            "apikey": ALPHA_VANTAGE_API_KEY
+        }
+        
+        # Request data from Alpha Vantage
+        response = requests.get(url, params=params)
+        response.raise_for_status()
+        
+        # Parse the response
         data = response.json()
-        if "conversion_rates" in data and quote in data["conversion_rates"]:
-            return data["conversion_rates"][quote]
-        else:
-            raise ValueError(f"Rate for {base} to {quote} not found in API response.")
+        
+        # Check if the response contains the 'Time Series FX (15min)' data
+        if "Time Series FX (15min)" not in data:
+            raise ValueError(f"No data found for {base}/{quote}")
+        
+        # Get the most recent exchange rate
+        last_time = list(data["Time Series FX (15min)"].keys())[0]
+        exchange_rate = data["Time Series FX (15min)"][last_time]["4. close"]
+        return float(exchange_rate)
+    
     except Exception as e:
-        st.error(f"Error fetching live exchange rate from ExchangeRate-API: {e}")
+        st.error(f"Error fetching live exchange rate: {e}")
         return None
 
-# Fetch Bitcoin conversion rate
+# Fetch Bitcoin conversion rate (for demo)
 def fetch_btc_rate(currency):
     try:
-        btc_rate = btc_converter.get_latest_price(currency)
-        return btc_rate
+        url = f"https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies={currency.lower()}"
+        response = requests.get(url)
+        response.raise_for_status()
+        data = response.json()
+        if currency.lower() in data["bitcoin"]:
+            return data["bitcoin"][currency.lower()]
+        else:
+            raise ValueError(f"Bitcoin rate for {currency} not found.")
     except Exception as e:
         st.error(f"Error fetching Bitcoin rate: {e}")
         return None
 
-# Display live rate or Bitcoin conversion
+# Generate signal based on the selected indicator
 def generate_signal(pair, indicator):
     try:
-        base, quote = currency_pairs[pair]
         if indicator == "Live Exchange Rate":
             rate = fetch_live_rate(pair)
             if rate is not None:
-                return f"1 {base} = {rate:.4f} {quote}", rate
+                return f"1 {currency_pairs[pair][0]} = {rate:.4f} {currency_pairs[pair][1]}", rate
         elif indicator == "Bitcoin Conversion":
-            btc_rate = fetch_btc_rate(quote)
+            btc_rate = fetch_btc_rate(currency_pairs[pair][1])
             if btc_rate is not None:
-                return f"1 BTC = {btc_rate:.2f} {quote}", btc_rate
+                return f"1 BTC = {btc_rate:.2f} {currency_pairs[pair][1]}", btc_rate
         return "No Signal", None
     except Exception as e:
         st.error(f"Error generating signal: {e}")
         return "No Signal", None
 
-# Plot the live rate or BTC conversion
+# Plot the signal or conversion data
 def plot_signal(rate, indicator, pair):
     try:
         if rate is None:
