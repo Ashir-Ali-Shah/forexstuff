@@ -1,8 +1,6 @@
 import streamlit as st
-import backtrader as bt
 import pandas as pd
 import yfinance as yf
-import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 from datetime import datetime
 
@@ -27,6 +25,10 @@ selected_pair = st.sidebar.selectbox("🌍 Select Currency Pair", options=list(c
 account_balance = st.sidebar.number_input("💰 Account Balance (USD)", min_value=0.0, value=1000.0, step=100.0)
 risk_percentage = st.sidebar.slider("📉 Risk Percentage (%)", min_value=0.0, max_value=10.0, value=2.0, step=0.1)
 risk_reward_ratio = st.sidebar.slider("🎯 Risk/Reward Ratio", min_value=1.0, max_value=5.0, value=2.0, step=0.1)
+
+# Initialize trade history if not already present in session state
+if 'trade_history' not in st.session_state:
+    st.session_state.trade_history = pd.DataFrame(columns=["Currency Pair", "Entry Price", "Stop Loss", "Take Profit", "Lot Size", "Risk %", "Reward Ratio", "Date"])
 
 # Lot Size Calculation based on the risk percentage and stop loss
 def calculate_lot_size(balance, risk_percent, entry_price, stop_loss):
@@ -113,6 +115,20 @@ def plot_trade_signal_graph(entry_price, stop_loss, take_profit, lot_size):
     except Exception as e:
         st.error(f"Error generating graph: {e}")
 
+# Function to execute a trade and store in trade history
+def execute_trade(entry_price, stop_loss, take_profit, lot_size):
+    trade_data = {
+        "Currency Pair": selected_pair,
+        "Entry Price": entry_price,
+        "Stop Loss": stop_loss,
+        "Take Profit": take_profit,
+        "Lot Size": lot_size,
+        "Risk %": risk_percentage,
+        "Reward Ratio": risk_reward_ratio,
+        "Date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    }
+    st.session_state.trade_history = st.session_state.trade_history.append(trade_data, ignore_index=True)
+
 # Main Execution
 ticker_symbol = currency_pairs[selected_pair]
 data = fetch_forex_data(ticker_symbol)
@@ -142,7 +158,20 @@ if not data.empty:
         st.write(f"**Account Balance:** ${account_balance}")
         st.write(f"**Risk Percentage:** {risk_percentage}%")
         st.write(f"**Risk/Reward Ratio:** {risk_reward_ratio}")
+
+        # Add Execute Trade button
+        if st.button("Execute Trade"):
+            execute_trade(entry_price, stop_loss, take_profit, lot_size)
+            st.success("Trade executed successfully!")
+
     except Exception as e:
         st.error(f"An error occurred: {e}")
 else:
     st.error("Failed to fetch data for the selected pair.")
+
+# Display Trade History as a table
+if not st.session_state.trade_history.empty:
+    st.markdown("### 📜 Trade History")
+    st.dataframe(st.session_state.trade_history)
+else:
+    st.markdown("### 📜 Trade History is empty. Execute a trade to see the history.")
