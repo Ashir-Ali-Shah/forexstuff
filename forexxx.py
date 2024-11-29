@@ -119,10 +119,12 @@ data = fetch_forex_data(ticker_symbol)
 
 if not data.empty:
     try:
-        # Define the signal, entry price, stop loss, take profit, and lot size
-        signal, entry_price = "Buy", 2062.5  # Example entry
+        # Calculate stop loss and take profit using the Risk/Reward Ratio
+        entry_price = 2062.5  # Example entry price (can be dynamic)
         stop_loss = entry_price - 2  # Example stop loss (adjust as needed)
-        take_profit = entry_price + 1.5  # Example take profit (adjust as needed)
+        take_profit = entry_price + (2 * risk_reward_ratio)  # Adjust TP based on RRR
+
+        # Calculate lot size based on user inputs
         lot_size = calculate_lot_size(account_balance, risk_percentage, entry_price, stop_loss)
 
         # Display trade details
