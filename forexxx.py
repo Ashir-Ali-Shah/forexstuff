@@ -6,10 +6,8 @@ import mplfinance as mpf
 from matplotlib.dates import DateFormatter, AutoDateLocator
 import yfinance as yf
 
-# App title
 st.markdown("# 📈 Forex Trade Signal Generator")
 
-# Currency Pair Selection
 currency_pairs = {
     "EUR/USD": "EURUSD=X",
     "GBP/USD": "GBPUSD=X",
@@ -20,7 +18,6 @@ currency_pairs = {
     "USD/CHF": "USDCHF=X",
 }
 
-# Sidebar layout
 st.sidebar.markdown("## ⚙️ Settings")
 selected_pair = st.sidebar.selectbox("🌍 Select Currency Pair", options=list(currency_pairs.keys()))
 selected_indicator = st.sidebar.selectbox(
@@ -32,7 +29,6 @@ risk_percentage = st.sidebar.slider("📉 Risk Percentage (%)", min_value=0.0, m
 risk_reward_ratio = st.sidebar.slider("🎯 Risk/Reward Ratio", min_value=1.0, max_value=5.0, value=2.0, step=0.1)
 chart_type = st.sidebar.radio("📈 Chart Type", options=["Candlestick", "Line Chart"])
 
-# Fetch Forex data using yfinance
 @st.cache_data
 def fetch_forex_data(pair):
     try:
@@ -47,15 +43,12 @@ def fetch_forex_data(pair):
         st.error(f"Error fetching forex data: {e}")
         return pd.DataFrame()
 
-# Simple Moving Average
 def calculate_sma(data, window):
     return data["Close"].rolling(window=window).mean()
 
-# Exponential Moving Average
 def calculate_ema(data, window):
     return data["Close"].ewm(span=window, adjust=False).mean()
 
-# Relative Strength Index
 def calculate_rsi(data, window):
     delta = data["Close"].diff()
     gain = (delta.where(delta > 0, 0)).rolling(window=window).mean()
@@ -64,7 +57,6 @@ def calculate_rsi(data, window):
     rsi = 100 - (100 / (1 + rs))
     return rsi
 
-# Function to calculate lot size
 def calculate_lot_size(balance, risk_percent, entry_price, stop_loss):
     try:
         risk_amount = balance * (risk_percent / 100)
@@ -77,7 +69,6 @@ def calculate_lot_size(balance, risk_percent, entry_price, stop_loss):
         st.error(f"Error calculating lot size: {e}")
         return 0
 
-# Generate Trade Signal
 def generate_signal(data, indicator):
     try:
         if data.empty:
@@ -86,14 +77,20 @@ def generate_signal(data, indicator):
         if indicator == "SMA (10/50)":
             data["SMA_10"] = calculate_sma(data, 10)
             data["SMA_50"] = calculate_sma(data, 50)
+            if pd.isna(data["SMA_10"].iloc[-1]) or pd.isna(data["SMA_50"].iloc[-1]):
+                raise ValueError("Insufficient data to calculate SMA indicators.")
             signal_condition = data["SMA_10"].iloc[-1] > data["SMA_50"].iloc[-1]
         elif indicator == "EMA (10/50)":
             data["EMA_10"] = calculate_ema(data, 10)
             data["EMA_50"] = calculate_ema(data, 50)
+            if pd.isna(data["EMA_10"].iloc[-1]) or pd.isna(data["EMA_50"].iloc[-1]):
+                raise ValueError("Insufficient data to calculate EMA indicators.")
             signal_condition = data["EMA_10"].iloc[-1] > data["EMA_50"].iloc[-1]
         elif indicator == "RSI (14)":
             data["RSI"] = calculate_rsi(data, 14)
-            signal_condition = data["RSI"].iloc[-1] < 30  # Buy signal when RSI is oversold
+            if pd.isna(data["RSI"].iloc[-1]):
+                raise ValueError("Insufficient data to calculate RSI.")
+            signal_condition = data["RSI"].iloc[-1] < 30
 
         last_close = data["Close"].iloc[-1]
         if signal_condition:
@@ -104,7 +101,6 @@ def generate_signal(data, indicator):
         st.error(f"Error generating trade signal: {e}")
         return "No Signal", 0.0
 
-# Plotting function
 def plot_chart(data, signal, entry_price, stop_loss, take_profit, chart_type):
     try:
         if data.empty:
@@ -134,7 +130,6 @@ def plot_chart(data, signal, entry_price, stop_loss, take_profit, chart_type):
     except Exception as e:
         st.error(f"Error generating chart: {e}")
 
-# Main Execution
 data = fetch_forex_data(currency_pairs[selected_pair])
 
 if not data.empty:
