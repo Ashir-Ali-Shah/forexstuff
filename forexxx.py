@@ -3,6 +3,7 @@ import pandas as pd
 import yfinance as yf
 import plotly.graph_objects as go
 from datetime import datetime
+
 # App title
 st.markdown("# 📈 Forex Trade Signal Generator")
 
@@ -148,7 +149,7 @@ if not data.empty:
         # Calculate the ATR value for dynamic stop loss and take profit
         atr_value = calculate_atr(data)
 
-        # Example entry price (can be dynamic)
+        # Example entry price (get the last closing price)
         entry_price = data['close'].iloc[-1]
 
         # Dynamic stop loss and take profit based on ATR
