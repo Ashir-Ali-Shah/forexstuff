@@ -57,15 +57,6 @@ def fetch_forex_data(pair):
         st.error(f"Error fetching forex data: {e}")
         return pd.DataFrame()
 
-# Calculate the Average True Range (ATR) for volatility-based stop loss and take profit
-def calculate_atr(data, period=14):
-    data['high-low'] = data['high'] - data['low']
-    data['high-close'] = abs(data['high'] - data['close'].shift(1))
-    data['low-close'] = abs(data['low'] - data['close'].shift(1))
-    data['tr'] = data[['high-low', 'high-close', 'low-close']].max(axis=1)
-    atr = data['tr'].rolling(window=period).mean().iloc[-1]  # Get the most recent ATR value
-    return atr
-
 # Plotting function with Plotly for beautiful and interactive charts
 def plot_trade_signal_graph(entry_price, stop_loss, take_profit, lot_size):
     try:
@@ -116,7 +107,7 @@ def plot_trade_signal_graph(entry_price, stop_loss, take_profit, lot_size):
             xaxis_title="Date",
             yaxis_title="Price",
             showlegend=True,
-            template="plotly"  # Change to white theme
+            template="plotly_dark"
         )
 
         st.plotly_chart(fig)
@@ -146,16 +137,10 @@ data = fetch_forex_data(ticker_symbol)
 
 if not data.empty:
     try:
-        # Calculate the ATR value for dynamic stop loss and take profit
-        atr_value = calculate_atr(data)
-
-        # Example entry price (get the last closing price)
-        entry_price = data['close'].iloc[-1]
-
-        # Dynamic stop loss and take profit based on ATR
-        atr_multiplier = 1.5  # 1.5x ATR for stop loss
-        stop_loss = entry_price - atr_value * atr_multiplier  # Stop loss below the entry price
-        take_profit = entry_price + atr_value * risk_reward_ratio * atr_multiplier  # Take profit above the entry price
+        # Calculate stop loss and take profit using the Risk/Reward Ratio
+        entry_price = 2062.5  # Example entry price (can be dynamic)
+        stop_loss = entry_price - 2  # Example stop loss (adjust as needed)
+        take_profit = entry_price + (2 * risk_reward_ratio)  # Adjust TP based on RRR
 
         # Calculate lot size based on user inputs
         lot_size = calculate_lot_size(account_balance, risk_percentage, entry_price, stop_loss)
