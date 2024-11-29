@@ -68,9 +68,13 @@ def plot_strategy(data, strategy):
         data_feed = bt.feeds.PandasData(dataname=data)
         cerebro.adddata(data_feed)
         
-        # Set initial cash and run the strategy
+        # Set initial cash and configure the broker
         cerebro.broker.set_cash(account_balance)
+        
+        # Set commission (instead of 'set_commission' method, directly assign a commission for the broker)
         cerebro.broker.set_commission(commission=0.001)
+        
+        # Run the strategy
         cerebro.run()
         
         # Plot the result
