@@ -1,10 +1,12 @@
 import streamlit as st
-import backtrader as bt
 import pandas as pd
 import yfinance as yf
-import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 from datetime import datetime
+import numpy as np
+from ta.trend import SMAIndicator, EMAIndicator
+from ta.momentum import RSIIndicator
+from time import sleep
 
 # App title
 st.markdown("# 📈 Forex Trade Signal Generator")
@@ -56,9 +58,19 @@ def fetch_forex_data(pair):
         return pd.DataFrame()
 
 # Plotting function with Plotly for beautiful and interactive charts
-def plot_trade_signal_graph(entry_price, stop_loss, take_profit, lot_size):
+def plot_trade_signal_graph(entry_price, stop_loss, take_profit, lot_size, data, signal):
     try:
         fig = go.Figure()
+
+        # Plotting the price data as candlesticks
+        fig.add_trace(go.Candlestick(
+            x=data.index,
+            open=data['open'],
+            high=data['high'],
+            low=data['low'],
+            close=data['close'],
+            name="Price Data"
+        ))
 
         # Add the entry price point
         fig.add_trace(go.Scatter(
@@ -113,16 +125,56 @@ def plot_trade_signal_graph(entry_price, stop_loss, take_profit, lot_size):
     except Exception as e:
         st.error(f"Error generating graph: {e}")
 
+# Generate signal based on basic indicators (Simple Example)
+def generate_signal(data):
+    try:
+        # Calculate Moving Averages and RSI
+        close_series = data["close"]
+        sma_10 = SMAIndicator(close_series, window=10).sma_indicator()
+        sma_50 = SMAIndicator(close_series, window=50).sma_indicator()
+        rsi = RSIIndicator(close_series, window=14).rsi()
+
+        # Simple Signal Strategy: Buy when SMA10 > SMA50 and RSI < 30 (indicating oversold)
+        signal = "Sell"  # Default signal
+        entry_price = close_series.iloc[-1]
+
+        if sma_10.iloc[-1] > sma_50.iloc[-1] and rsi.iloc[-1] < 30:
+            signal = "Buy"
+        
+        return signal, entry_price
+
+    except Exception as e:
+        st.error(f"Error generating trade signal: {e}")
+        return "No Signal", 0.0
+
+# Track trade history
+def track_trade_history(signal, entry_price, stop_loss, take_profit, lot_size):
+    trade_history = st.session_state.get('trade_history', [])
+    trade = {
+        'Signal': signal,
+        'Entry Price': entry_price,
+        'Stop Loss': stop_loss,
+        'Take Profit': take_profit,
+        'Lot Size': lot_size,
+        'Date': datetime.now()
+    }
+    trade_history.append(trade)
+    st.session_state['trade_history'] = trade_history
+
 # Main Execution
 ticker_symbol = currency_pairs[selected_pair]
 data = fetch_forex_data(ticker_symbol)
 
 if not data.empty:
     try:
-        # Define the signal, entry price, stop loss, take profit, and lot size
-        signal, entry_price = "Buy", 2062.5  # Example entry
+        # Generate trade signal
+        signal, entry_price = generate_signal(data)
+
+        # Define the stop loss and take profit (using an example calculation)
         stop_loss = entry_price - 2  # Example stop loss (adjust as needed)
         take_profit = entry_price + 1.5  # Example take profit (adjust as needed)
+
+        # Calculate lot size
         lot_size = calculate_lot_size(account_balance, risk_percentage, entry_price, stop_loss)
 
         # Display trade details
@@ -133,13 +185,16 @@ if not data.empty:
         st.write(f"**Lot Size**: {lot_size}")
 
         # Plot the trade signal graph
-        plot_trade_signal_graph(entry_price, stop_loss, take_profit, lot_size)
+        plot_trade_signal_graph(entry_price, stop_loss, take_profit, lot_size, data, signal)
 
-        # Display details
-        st.markdown("### 📈 Trade Details")
-        st.write(f"**Account Balance:** ${account_balance}")
-        st.write(f"**Risk Percentage:** {risk_percentage}%")
-        st.write(f"**Risk/Reward Ratio:** {risk_reward_ratio}")
+        # Track trade history
+        track_trade_history(signal, entry_price, stop_loss, take_profit, lot_size)
+
+        # Display trade history as a table
+        st.markdown("### 📝 Trade History")
+        trade_history_df = pd.DataFrame(st.session_state.get('trade_history', []))
+        st.dataframe(trade_history_df)
+
     except Exception as e:
         st.error(f"An error occurred: {e}")
 else:
