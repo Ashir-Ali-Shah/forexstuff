@@ -3,24 +3,21 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import mplfinance as mpf
-from ta.trend import SMAIndicator, EMAIndicator
-from ta.momentum import RSIIndicator
+import ccxt
 from matplotlib.dates import DateFormatter, AutoDateLocator
-import yfinance as yf
 
 # App title
 st.markdown("# 📈 Forex Trade Signal Generator")
 
 # Currency Pair Selection
 currency_pairs = {
-    "XAUUSD": "GLD",  # Using SPDR Gold Shares ETF as an alternative
-    "EURUSD": "EURUSD=X",
-    "GBPUSD": "GBPUSD=X",
-    "USDJPY": "USDJPY=X",
-    "AUDUSD": "AUDUSD=X",
-    "NZDUSD": "NZDUSD=X",
-    "USDCAD": "USDCAD=X",
-    "USDCHF": "USDCHF=X",
+    "EUR/USD": "EUR/USDT",
+    "GBP/USD": "GBP/USDT",
+    "USD/JPY": "USD/JPY",
+    "AUD/USD": "AUD/USDT",
+    "NZD/USD": "NZD/USDT",
+    "USD/CAD": "USD/CAD",
+    "USD/CHF": "USD/CHF",
 }
 
 # Sidebar layout
@@ -35,23 +32,38 @@ risk_percentage = st.sidebar.slider("📉 Risk Percentage (%)", min_value=0.0, m
 risk_reward_ratio = st.sidebar.slider("🎯 Risk/Reward Ratio", min_value=1.0, max_value=5.0, value=2.0, step=0.1)
 chart_type = st.sidebar.radio("📈 Chart Type", options=["Candlestick", "Line Chart"])
 
-# Fetch real-time forex data using yfinance
+# Fetch real-time forex data using ccxt
 @st.cache_data
 def fetch_forex_data(pair):
     try:
-        st.write(f"Fetching data for {pair}...")
-        data = yf.download(tickers=pair, period="5d", interval="15m", progress=False)
-        if data.empty:
-            raise ValueError(f"No data fetched for the selected pair: {pair}")
-        data.reset_index(inplace=True)
-        if "Close" not in data.columns:
-            raise ValueError(f"'Close' column is missing in the data for {pair}")
-        data.rename(columns={"Datetime": "Datetime", "Open": "Open", "High": "High", "Low": "Low", "Close": "Close"}, inplace=True)
-        data.set_index("Datetime", inplace=True)
-        return data
+        exchange = ccxt.binance()
+        market = currency_pairs[pair].replace("/", "")
+        data = exchange.fetch_ohlcv(market, timeframe="15m", limit=130)
+        df = pd.DataFrame(data, columns=["timestamp", "open", "high", "low", "close", "volume"])
+        df["datetime"] = pd.to_datetime(df["timestamp"], unit="ms")
+        df.set_index("datetime", inplace=True)
+        df.drop(columns=["timestamp"], inplace=True)
+        return df
     except Exception as e:
         st.error(f"Error fetching forex data: {e}")
         return pd.DataFrame()
+
+# Simple Moving Average
+def calculate_sma(data, window):
+    return data["close"].rolling(window=window).mean()
+
+# Exponential Moving Average
+def calculate_ema(data, window):
+    return data["close"].ewm(span=window, adjust=False).mean()
+
+# Relative Strength Index
+def calculate_rsi(data, window):
+    delta = data["close"].diff()
+    gain = (delta.where(delta > 0, 0)).rolling(window=window).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=window).mean()
+    rs = gain / loss
+    rsi = 100 - (100 / (1 + rs))
+    return rsi
 
 # Function to calculate lot size
 def calculate_lot_size(balance, risk_percent, entry_price, stop_loss):
@@ -69,32 +81,22 @@ def calculate_lot_size(balance, risk_percent, entry_price, stop_loss):
 # Generate Trade Signal
 def generate_signal(data, indicator):
     try:
-        if data.empty or "Close" not in data.columns:
-            raise ValueError("Data is empty or invalid for signal generation.")
-
-        # Ensure the 'Close' column is a pandas Series
-        close_series = data["Close"]
+        if data.empty:
+            raise ValueError("Data is empty for signal generation.")
 
         if indicator == "SMA (10/50)":
-            sma10 = SMAIndicator(close_series, window=10).sma_indicator()
-            sma50 = SMAIndicator(close_series, window=50).sma_indicator()
-            data["Indicator1"] = sma10  # Safe to assign directly
-            data["Indicator2"] = sma50  # Safe to assign directly
-            signal_condition = data["Indicator1"].iloc[-1] > data["Indicator2"].iloc[-1]
+            data["SMA_10"] = calculate_sma(data, 10)
+            data["SMA_50"] = calculate_sma(data, 50)
+            signal_condition = data["SMA_10"].iloc[-1] > data["SMA_50"].iloc[-1]
         elif indicator == "EMA (10/50)":
-            ema10 = EMAIndicator(close_series, window=10).ema_indicator()
-            ema50 = EMAIndicator(close_series, window=50).ema_indicator()
-            data["Indicator1"] = ema10  # Safe to assign directly
-            data["Indicator2"] = ema50  # Safe to assign directly
-            signal_condition = data["Indicator1"].iloc[-1] > data["Indicator2"].iloc[-1]
+            data["EMA_10"] = calculate_ema(data, 10)
+            data["EMA_50"] = calculate_ema(data, 50)
+            signal_condition = data["EMA_10"].iloc[-1] > data["EMA_50"].iloc[-1]
         elif indicator == "RSI (14)":
-            rsi = RSIIndicator(close_series, window=14).rsi()
-            data["RSI"] = rsi  # Safe to assign directly
+            data["RSI"] = calculate_rsi(data, 14)
             signal_condition = data["RSI"].iloc[-1] < 30  # Buy signal when RSI is oversold
 
-        last_close = data["Close"].iloc[-1]
-        if pd.isna(last_close):
-            raise ValueError("Last close price is NaN.")
+        last_close = data["close"].iloc[-1]
         if signal_condition:
             return "Buy", last_close
         else:
@@ -112,14 +114,12 @@ def plot_chart(data, signal, entry_price, stop_loss, take_profit, chart_type):
         if chart_type == "Candlestick":
             fig, ax = plt.subplots(figsize=(12, 8))
             mpf.plot(data, type="candle", style="charles", ax=ax, mav=(10, 50), volume=False)
-            ax.plot(data.index, data["Indicator1"], label="Indicator 1", color="blue")
-            ax.plot(data.index, data["Indicator2"], label="Indicator 2", color="orange")
-            ax.scatter(data.index[-1], entry_price, color="green", label=f"Entry: {signal}", zorder=5)
+            ax.axhline(entry_price, color="orange", linestyle="--", label=f"Entry: {signal}")
             ax.axhline(stop_loss, color="red", linestyle="--", label="Stop Loss")
             ax.axhline(take_profit, color="green", linestyle="--", label="Take Profit")
         else:
             fig, ax = plt.subplots(figsize=(12, 8))
-            ax.plot(data.index, data["Close"], label="Close Price", color="blue")
+            ax.plot(data.index, data["close"], label="Close Price", color="blue")
             ax.axhline(entry_price, color="orange", linestyle="--", label="Entry Price")
             ax.axhline(stop_loss, color="red", linestyle="--", label="Stop Loss")
             ax.axhline(take_profit, color="green", linestyle="--", label="Take Profit")
@@ -136,8 +136,7 @@ def plot_chart(data, signal, entry_price, stop_loss, take_profit, chart_type):
         st.error(f"Error generating chart: {e}")
 
 # Main Execution
-ticker_symbol = currency_pairs[selected_pair]
-data = fetch_forex_data(ticker_symbol)
+data = fetch_forex_data(selected_pair)
 
 if not data.empty:
     try:
