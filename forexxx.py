@@ -3,7 +3,8 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from forex_python.converter import CurrencyRates
-from forex_python.bitcoin import BtcConverter
+import requests
+import time
 
 # App title
 st.markdown("# 📈 Forex Trade Signal Generator")
@@ -32,16 +33,35 @@ risk_reward_ratio = st.sidebar.slider("🎯 Risk/Reward Ratio", min_value=1.0, m
 
 # Initialize forex-python converters
 currency_converter = CurrencyRates()
-btc_converter = BtcConverter()
 
-# Fetch live exchange rate
+# Fetch live exchange rate with retries and error handling
 def fetch_live_rate(pair):
     try:
         base, quote = currency_pairs[pair]
         rate = currency_converter.get_rate(base, quote)
+        if rate is None:
+            raise ValueError("API returned no rate for the given currency pair.")
         return rate
     except Exception as e:
-        st.error(f"Error fetching live exchange rate: {e}")
+        st.error(f"Error fetching live exchange rate with forex-python: {e}")
+        # Fallback to alternative API if forex-python fails
+        return fetch_live_rate_alternative(pair)
+
+# Alternative: Use ExchangeRate-API (Backup Plan)
+def fetch_live_rate_alternative(pair):
+    try:
+        base, quote = currency_pairs[pair]
+        api_key = "YOUR_EXCHANGERATE_API_KEY"  # Replace with your ExchangeRate-API key
+        url = f"https://v6.exchangerate-api.com/v6/{api_key}/latest/{base}"
+        response = requests.get(url)
+        response.raise_for_status()  # Raise an HTTPError for bad responses
+        data = response.json()
+        if "conversion_rates" in data and quote in data["conversion_rates"]:
+            return data["conversion_rates"][quote]
+        else:
+            raise ValueError(f"Rate for {base} to {quote} not found in API response.")
+    except Exception as e:
+        st.error(f"Error fetching live exchange rate from ExchangeRate-API: {e}")
         return None
 
 # Fetch Bitcoin conversion rate
