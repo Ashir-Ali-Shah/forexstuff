@@ -93,7 +93,7 @@ def generate_signal(data, indicator):
             signal_condition = data["RSI"].iloc[-1] < 30
 
         last_close = data["Close"].iloc[-1]
-        if signal_condition:
+        if bool(signal_condition):  # Convert to a single boolean value
             return "Buy", last_close
         else:
             return "Sell", last_close
