@@ -127,7 +127,9 @@ def execute_trade(entry_price, stop_loss, take_profit, lot_size):
         "Reward Ratio": risk_reward_ratio,
         "Date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     }
-    st.session_state.trade_history = st.session_state.trade_history.append(trade_data, ignore_index=True)
+    # Using pd.concat() instead of append
+    new_trade = pd.DataFrame([trade_data])
+    st.session_state.trade_history = pd.concat([st.session_state.trade_history, new_trade], ignore_index=True)
 
 # Main Execution
 ticker_symbol = currency_pairs[selected_pair]
