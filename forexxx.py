@@ -3,6 +3,7 @@ import backtrader as bt
 import pandas as pd
 import yfinance as yf
 import matplotlib.pyplot as plt
+import plotly.graph_objects as go
 from datetime import datetime
 
 # App title
@@ -54,47 +55,63 @@ def fetch_forex_data(pair):
         st.error(f"Error fetching forex data: {e}")
         return pd.DataFrame()
 
-# Backtrader Strategy: Simple Moving Average Crossover
-class SMACrossover(bt.SignalStrategy):
-    def __init__(self):
-        # Add the indicators to the strategy
-        self.sma10 = bt.indicators.SimpleMovingAverage(self.data.close, period=10)
-        self.sma50 = bt.indicators.SimpleMovingAverage(self.data.close, period=50)
-
-    def next(self):
-        # If SMA10 crosses above SMA50, it's a Buy signal
-        if self.sma10 > self.sma50:
-            if not self.position:
-                self.buy()
-        # If SMA10 crosses below SMA50, it's a Sell signal
-        elif self.sma10 < self.sma50:
-            if self.position:
-                self.sell()
-
-# Plotting function
-def plot_strategy(data, strategy):
+# Plotting function with Plotly for beautiful and interactive charts
+def plot_trade_signal_graph(entry_price, stop_loss, take_profit, lot_size):
     try:
-        # Setup the Backtrader Cerebro engine
-        cerebro = bt.Cerebro()
-        cerebro.addstrategy(strategy)
-        
-        # Convert the dataframe to a Backtrader feed
-        data_feed = bt.feeds.PandasData(dataname=data)
-        cerebro.adddata(data_feed)
-        
-        # Set initial cash and configure the broker
-        cerebro.broker.set_cash(account_balance)
-        
-        # Set commission (instead of 'set_commission' method, directly assign a commission for the broker)
-        cerebro.broker.set_commission(commission=0.001)
-        
-        # Run the strategy
-        cerebro.run()
-        
-        # Plot the result
-        cerebro.plot(style='candlestick')
+        fig = go.Figure()
+
+        # Add the entry price point
+        fig.add_trace(go.Scatter(
+            x=[datetime.now()],
+            y=[entry_price],
+            mode='markers',
+            name='Entry Price',
+            marker=dict(color='green', size=12)
+        ))
+
+        # Add the stop loss line
+        fig.add_trace(go.Scatter(
+            x=[datetime.now(), datetime.now()],
+            y=[stop_loss, stop_loss],
+            mode='lines',
+            name='Stop Loss',
+            line=dict(color='red', dash='dash')
+        ))
+
+        # Add the take profit line
+        fig.add_trace(go.Scatter(
+            x=[datetime.now(), datetime.now()],
+            y=[take_profit, take_profit],
+            mode='lines',
+            name='Take Profit',
+            line=dict(color='blue', dash='dash')
+        ))
+
+        # Add annotation for Lot Size
+        fig.add_annotation(
+            x=datetime.now(),
+            y=(entry_price + stop_loss) / 2,
+            text=f"Lot Size: {lot_size}",
+            showarrow=True,
+            arrowhead=2,
+            ax=-100,
+            ay=-100,
+            font=dict(size=12, color="black")
+        )
+
+        # Update the layout
+        fig.update_layout(
+            title=f"Trade Signal for {selected_pair}",
+            xaxis_title="Date",
+            yaxis_title="Price",
+            showlegend=True,
+            template="plotly_dark"
+        )
+
+        st.plotly_chart(fig)
+
     except Exception as e:
-        st.error(f"Error generating chart: {e}")
+        st.error(f"Error generating graph: {e}")
 
 # Main Execution
 ticker_symbol = currency_pairs[selected_pair]
@@ -115,8 +132,8 @@ if not data.empty:
         st.write(f"**Take Profit**: {take_profit}")
         st.write(f"**Lot Size**: {lot_size}")
 
-        # Plot the strategy result (this is optional, and can be visualized with Backtrader)
-        plot_strategy(data, SMACrossover)
+        # Plot the trade signal graph
+        plot_trade_signal_graph(entry_price, stop_loss, take_profit, lot_size)
 
         # Display details
         st.markdown("### 📈 Trade Details")
