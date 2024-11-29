@@ -4,6 +4,9 @@ import yfinance as yf
 import plotly.graph_objects as go
 from datetime import datetime
 
+# Set page config for a white UI
+st.set_page_config(page_title="Forex Trade Signal Generator", page_icon="📈", layout="wide", initial_sidebar_state="expanded")
+
 # App title
 st.markdown("# 📈 Forex Trade Signal Generator")
 
@@ -101,13 +104,13 @@ def plot_trade_signal_graph(entry_price, stop_loss, take_profit, lot_size):
             font=dict(size=12, color="black")
         )
 
-        # Update the layout
+        # Update the layout with a light theme
         fig.update_layout(
             title=f"Trade Signal for {selected_pair}",
             xaxis_title="Date",
             yaxis_title="Price",
             showlegend=True,
-            template="plotly_dark"
+            template="plotly_white"  # Change to white theme
         )
 
         st.plotly_chart(fig)
