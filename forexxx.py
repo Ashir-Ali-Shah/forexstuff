@@ -3,7 +3,6 @@ import pandas as pd
 import yfinance as yf
 import plotly.graph_objects as go
 from datetime import datetime
-
 # App title
 st.markdown("# 📈 Forex Trade Signal Generator")
 
