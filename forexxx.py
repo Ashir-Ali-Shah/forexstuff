@@ -3,6 +3,9 @@ import pandas as pd
 import yfinance as yf
 import plotly.graph_objects as go
 from datetime import datetime
+from sklearn.linear_model import LinearRegression
+from sklearn.model_selection import train_test_split
+import numpy as np
 
 # App title
 st.markdown("# 📈 Forex Trade Signal Generator")
@@ -57,8 +60,29 @@ def fetch_forex_data(pair):
         st.error(f"Error fetching forex data: {e}")
         return pd.DataFrame()
 
+# Machine Learning model for predicting next closing price
+def predict_price(data):
+    # Preprocessing the data to use the previous day's closing prices
+    data['Prev Close'] = data['close'].shift(1)
+    data = data.dropna()  # Drop rows with NaN values
+    
+    # Features and target variable
+    X = data[['Prev Close']]  # Use previous close as feature
+    y = data['close']  # Predict the next close
+    
+    # Train-test split
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, shuffle=False)
+    
+    # Fit the model
+    model = LinearRegression()
+    model.fit(X_train, y_train)
+    
+    # Predict the next closing price
+    predicted_price = model.predict(X[-1:][['Prev Close']])
+    return predicted_price[0]
+
 # Plotting function with Plotly for beautiful and interactive charts
-def plot_trade_signal_graph(entry_price, stop_loss, take_profit, lot_size):
+def plot_trade_signal_graph(entry_price, stop_loss, take_profit, lot_size, predicted_price):
     try:
         fig = go.Figure()
 
@@ -87,6 +111,15 @@ def plot_trade_signal_graph(entry_price, stop_loss, take_profit, lot_size):
             mode='lines',
             name='Take Profit',
             line=dict(color='blue', dash='dash')
+        ))
+
+        # Add the predicted price line
+        fig.add_trace(go.Scatter(
+            x=[datetime.now()],
+            y=[predicted_price],
+            mode='markers',
+            name='Predicted Price',
+            marker=dict(color='purple', size=12)
         ))
 
         # Add annotation for Lot Size
@@ -137,8 +170,11 @@ data = fetch_forex_data(ticker_symbol)
 
 if not data.empty:
     try:
+        # Predict the next closing price
+        predicted_price = predict_price(data)
+
         # Calculate stop loss and take profit using the Risk/Reward Ratio
-        entry_price = 2062.5  # Example entry price (can be dynamic)
+        entry_price = predicted_price  # Use predicted price as entry point
         stop_loss = entry_price - 2  # Example stop loss (adjust as needed)
         take_profit = entry_price + (2 * risk_reward_ratio)  # Adjust TP based on RRR
 
@@ -147,13 +183,13 @@ if not data.empty:
 
         # Display trade details
         st.markdown("### 📊 Trade Signal")
-        st.write(f"**Entry Price**: {entry_price}")
+        st.write(f"**Predicted Entry Price**: {entry_price}")
         st.write(f"**Stop Loss**: {stop_loss}")
         st.write(f"**Take Profit**: {take_profit}")
         st.write(f"**Lot Size**: {lot_size}")
 
         # Plot the trade signal graph
-        plot_trade_signal_graph(entry_price, stop_loss, take_profit, lot_size)
+        plot_trade_signal_graph(entry_price, stop_loss, take_profit, lot_size, predicted_price)
 
         # Display details
         st.markdown("### 📈 Trade Details")
