@@ -3,21 +3,21 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import mplfinance as mpf
-import ccxt
 from matplotlib.dates import DateFormatter, AutoDateLocator
+import yfinance as yf
 
 # App title
 st.markdown("# 📈 Forex Trade Signal Generator")
 
 # Currency Pair Selection
 currency_pairs = {
-    "EUR/USD": "EUR/USDT",
-    "GBP/USD": "GBP/USDT",
-    "USD/JPY": "USD/JPY",
-    "AUD/USD": "AUD/USDT",
-    "NZD/USD": "NZD/USDT",
-    "USD/CAD": "USD/CAD",
-    "USD/CHF": "USD/CHF",
+    "EUR/USD": "EURUSD=X",
+    "GBP/USD": "GBPUSD=X",
+    "USD/JPY": "USDJPY=X",
+    "AUD/USD": "AUDUSD=X",
+    "NZD/USD": "NZDUSD=X",
+    "USD/CAD": "USDCAD=X",
+    "USD/CHF": "USDCHF=X",
 }
 
 # Sidebar layout
@@ -32,33 +32,32 @@ risk_percentage = st.sidebar.slider("📉 Risk Percentage (%)", min_value=0.0, m
 risk_reward_ratio = st.sidebar.slider("🎯 Risk/Reward Ratio", min_value=1.0, max_value=5.0, value=2.0, step=0.1)
 chart_type = st.sidebar.radio("📈 Chart Type", options=["Candlestick", "Line Chart"])
 
-# Fetch real-time forex data using ccxt
+# Fetch Forex data using yfinance
 @st.cache_data
 def fetch_forex_data(pair):
     try:
-        exchange = ccxt.binance()
-        market = currency_pairs[pair].replace("/", "")
-        data = exchange.fetch_ohlcv(market, timeframe="15m", limit=130)
-        df = pd.DataFrame(data, columns=["timestamp", "open", "high", "low", "close", "volume"])
-        df["datetime"] = pd.to_datetime(df["timestamp"], unit="ms")
-        df.set_index("datetime", inplace=True)
-        df.drop(columns=["timestamp"], inplace=True)
-        return df
+        data = yf.download(pair, period="5d", interval="15m")
+        if data.empty:
+            raise ValueError(f"No data fetched for the selected pair: {pair}")
+        data.reset_index(inplace=True)
+        data.rename(columns={"Datetime": "datetime"}, inplace=True)
+        data.set_index("datetime", inplace=True)
+        return data
     except Exception as e:
         st.error(f"Error fetching forex data: {e}")
         return pd.DataFrame()
 
 # Simple Moving Average
 def calculate_sma(data, window):
-    return data["close"].rolling(window=window).mean()
+    return data["Close"].rolling(window=window).mean()
 
 # Exponential Moving Average
 def calculate_ema(data, window):
-    return data["close"].ewm(span=window, adjust=False).mean()
+    return data["Close"].ewm(span=window, adjust=False).mean()
 
 # Relative Strength Index
 def calculate_rsi(data, window):
-    delta = data["close"].diff()
+    delta = data["Close"].diff()
     gain = (delta.where(delta > 0, 0)).rolling(window=window).mean()
     loss = (-delta.where(delta < 0, 0)).rolling(window=window).mean()
     rs = gain / loss
@@ -96,7 +95,7 @@ def generate_signal(data, indicator):
             data["RSI"] = calculate_rsi(data, 14)
             signal_condition = data["RSI"].iloc[-1] < 30  # Buy signal when RSI is oversold
 
-        last_close = data["close"].iloc[-1]
+        last_close = data["Close"].iloc[-1]
         if signal_condition:
             return "Buy", last_close
         else:
@@ -119,7 +118,7 @@ def plot_chart(data, signal, entry_price, stop_loss, take_profit, chart_type):
             ax.axhline(take_profit, color="green", linestyle="--", label="Take Profit")
         else:
             fig, ax = plt.subplots(figsize=(12, 8))
-            ax.plot(data.index, data["close"], label="Close Price", color="blue")
+            ax.plot(data.index, data["Close"], label="Close Price", color="blue")
             ax.axhline(entry_price, color="orange", linestyle="--", label="Entry Price")
             ax.axhline(stop_loss, color="red", linestyle="--", label="Stop Loss")
             ax.axhline(take_profit, color="green", linestyle="--", label="Take Profit")
@@ -136,7 +135,7 @@ def plot_chart(data, signal, entry_price, stop_loss, take_profit, chart_type):
         st.error(f"Error generating chart: {e}")
 
 # Main Execution
-data = fetch_forex_data(selected_pair)
+data = fetch_forex_data(currency_pairs[selected_pair])
 
 if not data.empty:
     try:
