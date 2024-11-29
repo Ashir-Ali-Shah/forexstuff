@@ -1,19 +1,17 @@
 import streamlit as st
-import yfinance as yf
+import backtrader as bt
 import pandas as pd
-import numpy as np
+import yfinance as yf
 import matplotlib.pyplot as plt
 import plotly.graph_objects as go
-from ta.trend import SMAIndicator, EMAIndicator
-from ta.momentum import RSIIndicator
-from ta.utils import dropna
+from datetime import datetime
 
 # App title
 st.markdown("# 📈 Forex Trade Signal Generator")
 
 # Currency Pair Selection
 currency_pairs = {
-    "XAUUSD": "GLD",  # Using SPDR Gold Shares ETF as an alternative
+    "XAUUSD": "GLD",  # Using SPDR Gold Shares ETF as an alternative for XAUUSD
     "EURUSD": "EURUSD=X",
     "GBPUSD": "GBPUSD=X",
     "USDJPY": "USDJPY=X",
@@ -26,34 +24,11 @@ currency_pairs = {
 # Sidebar layout
 st.sidebar.markdown("## ⚙️ Settings")
 selected_pair = st.sidebar.selectbox("🌍 Select Currency Pair", options=list(currency_pairs.keys()))
-selected_indicator = st.sidebar.selectbox(
-    "📊 Select Indicator",
-    options=["SMA (10/50)", "EMA (10/50)", "RSI (14)"]
-)
 account_balance = st.sidebar.number_input("💰 Account Balance (USD)", min_value=0.0, value=1000.0, step=100.0)
 risk_percentage = st.sidebar.slider("📉 Risk Percentage (%)", min_value=0.0, max_value=10.0, value=2.0, step=0.1)
 risk_reward_ratio = st.sidebar.slider("🎯 Risk/Reward Ratio", min_value=1.0, max_value=5.0, value=2.0, step=0.1)
-chart_type = st.sidebar.radio("📈 Chart Type", options=["Candlestick", "Line Chart"])
 
-# Fetch real-time forex data using yfinance
-@st.cache_data
-def fetch_forex_data(pair):
-    try:
-        st.write(f"Fetching data for {pair}...")
-        data = yf.download(tickers=pair, period="5d", interval="15m", progress=False)
-        if data.empty:
-            raise ValueError(f"No data fetched for the selected pair: {pair}")
-        data.reset_index(inplace=True)
-        if "Close" not in data.columns:
-            raise ValueError(f"'Close' column is missing in the data for {pair}")
-        data.rename(columns={"Datetime": "Datetime", "Open": "Open", "High": "High", "Low": "Low", "Close": "Close"}, inplace=True)
-        data.set_index("Datetime", inplace=True)
-        return data
-    except Exception as e:
-        st.error(f"Error fetching forex data: {e}")
-        return pd.DataFrame()
-
-# Function to calculate lot size
+# Lot Size Calculation based on the risk percentage and stop loss
 def calculate_lot_size(balance, risk_percent, entry_price, stop_loss):
     try:
         risk_amount = balance * (risk_percent / 100)
@@ -66,241 +41,77 @@ def calculate_lot_size(balance, risk_percent, entry_price, stop_loss):
         st.error(f"Error calculating lot size: {e}")
         return 0
 
-# Generate Trade Signal
-def generate_signal(data, indicator):
-    try:
-        if data.empty or "Close" not in data.columns:
-            raise ValueError("Data is empty or invalid for signal generation.")
-
-        # Ensure the 'Close' column is a pandas Series
-        close_series = data["Close"]
-
-        # Drop NaN values from the series (important for indicators)
-        close_series = dropna(close_series)
-
-        if indicator == "SMA (10/50)":
-            sma10 = SMAIndicator(close_series, window=10).sma_indicator()
-            sma50 = SMAIndicator(close_series, window=50).sma_indicator()
-            signal_condition = sma10.iloc[-1] > sma50.iloc[-1]
-        elif indicator == "EMA (10/50)":
-            ema10 = EMAIndicator(close_series, window=10).ema_indicator()
-            ema50 = EMAIndicator(close_series, window=50).ema_indicator()
-            signal_condition = ema10.iloc[-1] > ema50.iloc[-1]
-        elif indicator == "RSI (14)":
-            rsi = RSIIndicator(close_series, window=14).rsi()
-            signal_condition = rsi.iloc[-1] < 30  # Buy signal when RSI is oversold
-
-        last_close = data["Close"].iloc[-1]
-        if pd.isna(last_close):
-            raise ValueError("Last close price is NaN.")
-        if signal_condition:
-            return "Buy", last_close
-        else:
-            return "Sell", last_close
-    except Exception as e:
-        st.error(f"Error generating trade signal: {e}")
-        return "No Signal", 0.0
-
-# Plotting function
-def plot_chart(data, signal, entry_price, stop_loss, take_profit, chart_type):
-    try:
-        if data.empty:
-            raise ValueError("Data is empty for charting.")
-
-        if chart_type == "Candlestick":
-            fig = go.Figure(data=[go.Candlestick(x=data.index,
-                                                 open=data["Open"],
-                                                 high=data["High"],
-                                                 low=data["Low"],
-                                                 close=data["Close"])])
-            fig.add_trace(go.Scatter(x=data.index, y=data["Close"], mode="lines", name="Close Price"))
-            fig.add_trace(go.Scatter(x=data.index, y=entry_price, mode="markers", name="Entry Price", marker=dict(color="green", size=10)))
-            fig.add_trace(go.Scatter(x=data.index, y=stop_loss, mode="lines", name="Stop Loss", line=dict(color="red", dash="dash")))
-            fig.add_trace(go.Scatter(x=data.index, y=take_profit, mode="lines", name="Take Profit", line=dict(color="green", dash="dash")))
-            fig.update_layout(title=f"{selected_pair} Trade Signal", xaxis_title="Time", yaxis_title="Price")
-        else:
-            fig, ax = plt.subplots(figsize=(12, 8))
-            ax.plot(data.index, data["Close"], label="Close Price", color="blue")
-            ax.axhline(entry_price, color="orange", linestyle="--", label="Entry Price")
-            ax.axhline(stop_loss, color="red", linestyle="--", label="Stop Loss")
-            ax.axhline(take_profit, color="green", linestyle="--", label="Take Profit")
-
-        ax.set_title(f"{selected_pair} Trade Signal")
-        ax.set_ylabel("Price")
-        ax.legend()
-        ax.grid()
-        fig.autofmt_xdate()
-        st.pyplot(fig)
-    except Exception as e:
-        st.error(f"Error generating chart: {e}")
-
-# Main Execution
-ticker_symbol = currency_pairs[selected_pair]
-data = fetch_forex_data(ticker_symbol)
-
-if not data.empty:
-    try:
-        signal, entry_price = generate_signal(data, selected_indicator)
-        if entry_price == 0 or pd.isna(entry_price):
-            st.error("Failed to generate a valid entry price.")
-        else:
-            stop_loss = float(entry_price * 0.995)
-            take_profit = float(entry_price + (entry_price - stop_loss) * risk_reward_ratio)
-            lot_size = calculate_lot_size(account_balance, risk_percentage, entry_price, stop_loss)
-
-            col1, col2, col3 = st.columns(3)
-            col1.metric("Signal", signal)
-            col2.metric("Entry Price", f"${entry_price:.2f}")
-            col3.metric("Lot Size", f"{lot_size:.2f}")
-
-            st.markdown("### 📊 Trade Details")
-            st.write(f"**Stop Loss:** ${stop_loss:.2f}")
-            st.write(f"**Take Profit:** ${take_profit:.2f}")
-            st.write(f"**Risk Percentage:** {risk_percentage}%")
-            st.write(f"**Risk/Reward Ratio:** {risk_reward_ratio}")
-
-            st.markdown("---")
-            st.markdown("### 📈 Trade Chart")
-            plot_chart(data, signal, entry_price, stop_loss, take_profit, chart_type)
-    except Exception as e:
-        st.error(f"An error occurred: {e}")
-else:
-    st.error("Failed to fetch data for the selected pair.")
-import streamlit as st
-import yfinance as yf
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-import plotly.graph_objects as go
-from ta.trend import SMAIndicator, EMAIndicator
-from ta.momentum import RSIIndicator
-from ta.utils import dropna
-
-# App title
-st.markdown("# 📈 Forex Trade Signal Generator")
-
-# Currency Pair Selection
-currency_pairs = {
-    "XAUUSD": "GLD",  # Using SPDR Gold Shares ETF as an alternative
-    "EURUSD": "EURUSD=X",
-    "GBPUSD": "GBPUSD=X",
-    "USDJPY": "USDJPY=X",
-    "AUDUSD": "AUDUSD=X",
-    "NZDUSD": "NZDUSD=X",
-    "USDCAD": "USDCAD=X",
-    "USDCHF": "USDCHF=X",
-}
-
-# Sidebar layout
-st.sidebar.markdown("## ⚙️ Settings")
-selected_pair = st.sidebar.selectbox("🌍 Select Currency Pair", options=list(currency_pairs.keys()))
-selected_indicator = st.sidebar.selectbox(
-    "📊 Select Indicator",
-    options=["SMA (10/50)", "EMA (10/50)", "RSI (14)"]
-)
-account_balance = st.sidebar.number_input("💰 Account Balance (USD)", min_value=0.0, value=1000.0, step=100.0)
-risk_percentage = st.sidebar.slider("📉 Risk Percentage (%)", min_value=0.0, max_value=10.0, value=2.0, step=0.1)
-risk_reward_ratio = st.sidebar.slider("🎯 Risk/Reward Ratio", min_value=1.0, max_value=5.0, value=2.0, step=0.1)
-chart_type = st.sidebar.radio("📈 Chart Type", options=["Candlestick", "Line Chart"])
-
-# Fetch real-time forex data using yfinance
-@st.cache_data
+# Fetch forex data from Yahoo Finance using yfinance
 def fetch_forex_data(pair):
     try:
-        st.write(f"Fetching data for {pair}...")
         data = yf.download(tickers=pair, period="5d", interval="15m", progress=False)
         if data.empty:
             raise ValueError(f"No data fetched for the selected pair: {pair}")
         data.reset_index(inplace=True)
-        if "Close" not in data.columns:
-            raise ValueError(f"'Close' column is missing in the data for {pair}")
-        data.rename(columns={"Datetime": "Datetime", "Open": "Open", "High": "High", "Low": "Low", "Close": "Close"}, inplace=True)
-        data.set_index("Datetime", inplace=True)
+        data.rename(columns={"Datetime": "datetime", "Open": "open", "High": "high", "Low": "low", "Close": "close"}, inplace=True)
+        data.set_index("datetime", inplace=True)
         return data
     except Exception as e:
         st.error(f"Error fetching forex data: {e}")
         return pd.DataFrame()
 
-# Function to calculate lot size
-def calculate_lot_size(balance, risk_percent, entry_price, stop_loss):
+# Plotting function with Plotly for beautiful and interactive charts
+def plot_trade_signal_graph(entry_price, stop_loss, take_profit, lot_size):
     try:
-        risk_amount = balance * (risk_percent / 100)
-        pip_risk = abs(entry_price - stop_loss)
-        if pip_risk == 0:
-            return 0
-        lot_size = risk_amount / pip_risk
-        return round(lot_size, 2)
+        fig = go.Figure()
+
+        # Add the entry price point
+        fig.add_trace(go.Scatter(
+            x=[datetime.now()],
+            y=[entry_price],
+            mode='markers',
+            name='Entry Price',
+            marker=dict(color='green', size=12)
+        ))
+
+        # Add the stop loss line
+        fig.add_trace(go.Scatter(
+            x=[datetime.now(), datetime.now()],
+            y=[stop_loss, stop_loss],
+            mode='lines',
+            name='Stop Loss',
+            line=dict(color='red', dash='dash')
+        ))
+
+        # Add the take profit line
+        fig.add_trace(go.Scatter(
+            x=[datetime.now(), datetime.now()],
+            y=[take_profit, take_profit],
+            mode='lines',
+            name='Take Profit',
+            line=dict(color='blue', dash='dash')
+        ))
+
+        # Add annotation for Lot Size
+        fig.add_annotation(
+            x=datetime.now(),
+            y=(entry_price + stop_loss) / 2,
+            text=f"Lot Size: {lot_size}",
+            showarrow=True,
+            arrowhead=2,
+            ax=-100,
+            ay=-100,
+            font=dict(size=12, color="black")
+        )
+
+        # Update the layout
+        fig.update_layout(
+            title=f"Trade Signal for {selected_pair}",
+            xaxis_title="Date",
+            yaxis_title="Price",
+            showlegend=True,
+            template="plotly_dark"
+        )
+
+        st.plotly_chart(fig)
+
     except Exception as e:
-        st.error(f"Error calculating lot size: {e}")
-        return 0
-
-# Generate Trade Signal
-def generate_signal(data, indicator):
-    try:
-        if data.empty or "Close" not in data.columns:
-            raise ValueError("Data is empty or invalid for signal generation.")
-
-        # Ensure the 'Close' column is a pandas Series
-        close_series = data["Close"]
-
-        # Drop NaN values from the series (important for indicators)
-        close_series = dropna(close_series)
-
-        if indicator == "SMA (10/50)":
-            sma10 = SMAIndicator(close_series, window=10).sma_indicator()
-            sma50 = SMAIndicator(close_series, window=50).sma_indicator()
-            signal_condition = sma10.iloc[-1] > sma50.iloc[-1]
-        elif indicator == "EMA (10/50)":
-            ema10 = EMAIndicator(close_series, window=10).ema_indicator()
-            ema50 = EMAIndicator(close_series, window=50).ema_indicator()
-            signal_condition = ema10.iloc[-1] > ema50.iloc[-1]
-        elif indicator == "RSI (14)":
-            rsi = RSIIndicator(close_series, window=14).rsi()
-            signal_condition = rsi.iloc[-1] < 30  # Buy signal when RSI is oversold
-
-        last_close = data["Close"].iloc[-1]
-        if pd.isna(last_close):
-            raise ValueError("Last close price is NaN.")
-        if signal_condition:
-            return "Buy", last_close
-        else:
-            return "Sell", last_close
-    except Exception as e:
-        st.error(f"Error generating trade signal: {e}")
-        return "No Signal", 0.0
-
-# Plotting function
-def plot_chart(data, signal, entry_price, stop_loss, take_profit, chart_type):
-    try:
-        if data.empty:
-            raise ValueError("Data is empty for charting.")
-
-        if chart_type == "Candlestick":
-            fig = go.Figure(data=[go.Candlestick(x=data.index,
-                                                 open=data["Open"],
-                                                 high=data["High"],
-                                                 low=data["Low"],
-                                                 close=data["Close"])])
-            fig.add_trace(go.Scatter(x=data.index, y=data["Close"], mode="lines", name="Close Price"))
-            fig.add_trace(go.Scatter(x=data.index, y=entry_price, mode="markers", name="Entry Price", marker=dict(color="green", size=10)))
-            fig.add_trace(go.Scatter(x=data.index, y=stop_loss, mode="lines", name="Stop Loss", line=dict(color="red", dash="dash")))
-            fig.add_trace(go.Scatter(x=data.index, y=take_profit, mode="lines", name="Take Profit", line=dict(color="green", dash="dash")))
-            fig.update_layout(title=f"{selected_pair} Trade Signal", xaxis_title="Time", yaxis_title="Price")
-        else:
-            fig, ax = plt.subplots(figsize=(12, 8))
-            ax.plot(data.index, data["Close"], label="Close Price", color="blue")
-            ax.axhline(entry_price, color="orange", linestyle="--", label="Entry Price")
-            ax.axhline(stop_loss, color="red", linestyle="--", label="Stop Loss")
-            ax.axhline(take_profit, color="green", linestyle="--", label="Take Profit")
-
-        ax.set_title(f"{selected_pair} Trade Signal")
-        ax.set_ylabel("Price")
-        ax.legend()
-        ax.grid()
-        fig.autofmt_xdate()
-        st.pyplot(fig)
-    except Exception as e:
-        st.error(f"Error generating chart: {e}")
+        st.error(f"Error generating graph: {e}")
 
 # Main Execution
 ticker_symbol = currency_pairs[selected_pair]
@@ -308,28 +119,27 @@ data = fetch_forex_data(ticker_symbol)
 
 if not data.empty:
     try:
-        signal, entry_price = generate_signal(data, selected_indicator)
-        if entry_price == 0 or pd.isna(entry_price):
-            st.error("Failed to generate a valid entry price.")
-        else:
-            stop_loss = float(entry_price * 0.995)
-            take_profit = float(entry_price + (entry_price - stop_loss) * risk_reward_ratio)
-            lot_size = calculate_lot_size(account_balance, risk_percentage, entry_price, stop_loss)
+        # Define the signal, entry price, stop loss, take profit, and lot size
+        signal, entry_price = "Buy", 2062.5  # Example entry
+        stop_loss = entry_price - 2  # Example stop loss (adjust as needed)
+        take_profit = entry_price + 1.5  # Example take profit (adjust as needed)
+        lot_size = calculate_lot_size(account_balance, risk_percentage, entry_price, stop_loss)
 
-            col1, col2, col3 = st.columns(3)
-            col1.metric("Signal", signal)
-            col2.metric("Entry Price", f"${entry_price:.2f}")
-            col3.metric("Lot Size", f"{lot_size:.2f}")
+        # Display trade details
+        st.markdown("### 📊 Trade Signal")
+        st.write(f"**Entry Price**: {entry_price}")
+        st.write(f"**Stop Loss**: {stop_loss}")
+        st.write(f"**Take Profit**: {take_profit}")
+        st.write(f"**Lot Size**: {lot_size}")
 
-            st.markdown("### 📊 Trade Details")
-            st.write(f"**Stop Loss:** ${stop_loss:.2f}")
-            st.write(f"**Take Profit:** ${take_profit:.2f}")
-            st.write(f"**Risk Percentage:** {risk_percentage}%")
-            st.write(f"**Risk/Reward Ratio:** {risk_reward_ratio}")
+        # Plot the trade signal graph
+        plot_trade_signal_graph(entry_price, stop_loss, take_profit, lot_size)
 
-            st.markdown("---")
-            st.markdown("### 📈 Trade Chart")
-            plot_chart(data, signal, entry_price, stop_loss, take_profit, chart_type)
+        # Display details
+        st.markdown("### 📈 Trade Details")
+        st.write(f"**Account Balance:** ${account_balance}")
+        st.write(f"**Risk Percentage:** {risk_percentage}%")
+        st.write(f"**Risk/Reward Ratio:** {risk_reward_ratio}")
     except Exception as e:
         st.error(f"An error occurred: {e}")
 else:
