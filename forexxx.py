@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 import requests
-import time
 
 # App title
 st.markdown("# 📈 Forex Trade Signal Generator")
@@ -47,22 +46,31 @@ def fetch_live_rate(pair):
         
         # Request data from Alpha Vantage
         response = requests.get(url, params=params)
-        response.raise_for_status()
+        response.raise_for_status()  # This will raise an error for bad HTTP responses
         
         # Parse the response
         data = response.json()
         
+        # Debugging: Print the raw response data to check the structure
+        st.write(data)
+        
         # Check if the response contains the 'Time Series FX (15min)' data
         if "Time Series FX (15min)" not in data:
-            raise ValueError(f"No data found for {base}/{quote}")
+            raise ValueError(f"No data found for {base}/{quote}. The API response is: {data}")
         
         # Get the most recent exchange rate
         last_time = list(data["Time Series FX (15min)"].keys())[0]
         exchange_rate = data["Time Series FX (15min)"][last_time]["4. close"]
         return float(exchange_rate)
     
-    except Exception as e:
+    except requests.exceptions.RequestException as e:
         st.error(f"Error fetching live exchange rate: {e}")
+        return None
+    except ValueError as e:
+        st.error(f"Value error: {e}")
+        return None
+    except Exception as e:
+        st.error(f"Unexpected error: {e}")
         return None
 
 # Fetch Bitcoin conversion rate (for demo)
