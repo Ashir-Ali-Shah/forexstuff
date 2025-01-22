@@ -31,7 +31,7 @@ risk_reward_ratio = st.sidebar.slider("🎯 Risk/Reward Ratio", min_value=1.0, m
 
 # Initialize trade history if not already present in session state
 if 'trade_history' not in st.session_state:
-    st.session_state.trade_history = pd.DataFrame(columns=["Currency Pair", "Entry Price", "Stop Loss", "Take Profit", "Lot Size", "Risk %", "Reward Ratio", "Date"])
+    st.session_state.trade_history = pd.DataFrame(columns=["Currency Pair", "Entry Price", "Stop Loss", "Take Profit", "Lot Size", "Risk %", "Reward Ratio", "Trade Type", "Date"])
 
 # Lot Size Calculation based on the risk percentage and stop loss
 def calculate_lot_size(balance, risk_percent, entry_price, stop_loss):
@@ -61,7 +61,7 @@ def fetch_forex_data(pair):
         return pd.DataFrame()
 
 # Plotting function with Plotly for beautiful and interactive charts
-def plot_trade_signal_graph(entry_price, stop_loss, take_profit, lot_size):
+def plot_trade_signal_graph(entry_price, stop_loss, take_profit, lot_size, trade_type):
     try:
         fig = go.Figure()
 
@@ -96,7 +96,7 @@ def plot_trade_signal_graph(entry_price, stop_loss, take_profit, lot_size):
         fig.add_annotation(
             x=datetime.now(),
             y=(entry_price + stop_loss) / 2,
-            text=f"Lot Size: {lot_size}",
+            text=f"Lot Size: {lot_size} ({trade_type})",
             showarrow=True,
             arrowhead=2,
             ax=-100,
@@ -119,7 +119,7 @@ def plot_trade_signal_graph(entry_price, stop_loss, take_profit, lot_size):
         st.error(f"Error generating graph: {e}")
 
 # Function to execute a trade and store in trade history
-def execute_trade(entry_price, stop_loss, take_profit, lot_size):
+def execute_trade(entry_price, stop_loss, take_profit, lot_size, trade_type):
     trade_data = {
         "Currency Pair": selected_pair,
         "Entry Price": entry_price,
@@ -128,6 +128,7 @@ def execute_trade(entry_price, stop_loss, take_profit, lot_size):
         "Lot Size": lot_size,
         "Risk %": risk_percentage,
         "Reward Ratio": risk_reward_ratio,
+        "Trade Type": trade_type,
         "Date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     }
     # Using pd.concat() instead of append
@@ -145,18 +146,22 @@ if not data.empty:
         stop_loss = entry_price - 2  # Example stop loss (adjust as needed)
         take_profit = entry_price + (2 * risk_reward_ratio)  # Adjust TP based on RRR
 
+        # Determine Buy or Sell
+        trade_type = "Buy" if take_profit > entry_price else "Sell"
+
         # Calculate lot size based on user inputs
         lot_size = calculate_lot_size(account_balance, risk_percentage, entry_price, stop_loss)
 
         # Display trade details
         st.markdown("### 📊 Trade Signal")
+        st.write(f"**Trade Type**: {trade_type}")  # Show Buy or Sell
         st.write(f"**Entry Price**: {entry_price}")
         st.write(f"**Stop Loss**: {stop_loss}")
         st.write(f"**Take Profit**: {take_profit}")
         st.write(f"**Lot Size**: {lot_size}")
 
         # Plot the trade signal graph
-        plot_trade_signal_graph(entry_price, stop_loss, take_profit, lot_size)
+        plot_trade_signal_graph(entry_price, stop_loss, take_profit, lot_size, trade_type)
 
         # Display details
         st.markdown("### 📈 Trade Details")
@@ -166,7 +171,7 @@ if not data.empty:
 
         # Add Execute Trade button
         if st.button("Execute Trade"):
-            execute_trade(entry_price, stop_loss, take_profit, lot_size)
+            execute_trade(entry_price, stop_loss, take_profit, lot_size, trade_type)
             st.success("Trade executed successfully!")
 
     except Exception as e:
