@@ -161,8 +161,8 @@ data = fetch_forex_data(ticker_symbol)
 if not data.empty:
     try:
         # Calculate stop loss and take profit using the Risk/Reward Ratio
-        entry_price = 2062.5  # Example entry price (can be dynamic)
-        stop_loss = entry_price - 2  # Example stop loss (adjust as needed)
+        entry_price = data["close"].iloc[-1]  # Use the most recent closing price
+        stop_loss = entry_price - 2  # Example stop loss adjustment for gold
         take_profit = entry_price + (2 * risk_reward_ratio)  # Adjust TP based on RRR
 
         # Determine Buy or Sell
