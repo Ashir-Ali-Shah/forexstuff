@@ -36,7 +36,7 @@ risk_reward_ratio = st.sidebar.slider("🎯 Risk/Reward Ratio", min_value=1.0, m
 def load_model(file_path):
     return joblib.load(file_path)
 
-model = load_model('/mnt/data/forex_model_knn_use_indic.pkl')
+model = load_model('forex_model_knn_use_indic.pkl')
 
 # Predict function
 def predict_trade(inputs):
