@@ -64,10 +64,10 @@ def fetch_forex_data(pair):
 # Calculate signal strength based on recent volatility
 def calculate_signal_strength(data):
     try:
-        if data.empty or len(data) < 10:
+        if data.empty or len(data["close"]) < 10:  # Explicitly check the length of the 'close' column
             return "Unknown"
-        recent_closes = data["close"].tail(10)
-        volatility = np.std(recent_closes)
+        recent_closes = data["close"].tail(10)  # Get the last 10 closing prices
+        volatility = np.std(recent_closes)  # Calculate the standard deviation (volatility)
         if volatility < 0.5:
             return "Strong"
         elif volatility < 1.0:
