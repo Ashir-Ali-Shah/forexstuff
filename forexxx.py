@@ -5,6 +5,7 @@ import plotly.graph_objects as go
 from datetime import datetime
 import yfinance as yf
 import joblib
+import os
 
 # Set page config for a white UI
 st.set_page_config(page_title="Forex Trade Signal Generator", page_icon="📈", layout="wide", initial_sidebar_state="expanded")
@@ -34,12 +35,22 @@ risk_reward_ratio = st.sidebar.slider("🎯 Risk/Reward Ratio", min_value=1.0, m
 # Load the prediction model
 @st.cache_resource
 def load_model(file_path):
-    return joblib.load(file_path)
+    if not os.path.exists(file_path):
+        st.error(f"Model file not found: {file_path}")
+        return None
+    try:
+        return joblib.load(file_path)
+    except Exception as e:
+        st.error(f"Error loading model: {e}")
+        return None
 
-model = load_model('forex_model_knn_use_indic.pkl')
+model = load_model('/mnt/data/forex_model_knn_use_indic.pkl')
 
 # Predict function
 def predict_trade(inputs):
+    if model is None:
+        st.error("Prediction model is not loaded.")
+        return "Unknown"
     try:
         prediction = model.predict([inputs])
         return "Buy" if prediction[0] == 1 else "Sell"
