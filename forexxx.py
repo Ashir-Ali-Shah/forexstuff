@@ -3,6 +3,7 @@ import pandas as pd
 import yfinance as yf
 import plotly.graph_objects as go
 from datetime import datetime
+import numpy as np
 
 # Set page config for a white UI
 st.set_page_config(page_title="Forex Trade Signal Generator", page_icon="📈", layout="wide", initial_sidebar_state="expanded")
@@ -31,7 +32,7 @@ risk_reward_ratio = st.sidebar.slider("🎯 Risk/Reward Ratio", min_value=1.0, m
 
 # Initialize trade history if not already present in session state
 if 'trade_history' not in st.session_state:
-    st.session_state.trade_history = pd.DataFrame(columns=["Currency Pair", "Entry Price", "Stop Loss", "Take Profit", "Lot Size", "Risk %", "Reward Ratio", "Trade Type", "Date"])
+    st.session_state.trade_history = pd.DataFrame(columns=["Currency Pair", "Entry Price", "Stop Loss", "Take Profit", "Lot Size", "Risk %", "Reward Ratio", "Trade Type", "Signal Strength", "Date"])
 
 # Lot Size Calculation based on the risk percentage and stop loss
 def calculate_lot_size(balance, risk_percent, entry_price, stop_loss):
@@ -60,8 +61,25 @@ def fetch_forex_data(pair):
         st.error(f"Error fetching forex data: {e}")
         return pd.DataFrame()
 
+# Calculate signal strength based on recent volatility
+def calculate_signal_strength(data):
+    try:
+        if data.empty or len(data) < 10:
+            return "Unknown"
+        recent_closes = data["close"].tail(10)
+        volatility = np.std(recent_closes)
+        if volatility < 0.5:
+            return "Strong"
+        elif volatility < 1.0:
+            return "Moderate"
+        else:
+            return "Weak"
+    except Exception as e:
+        st.error(f"Error calculating signal strength: {e}")
+        return "Unknown"
+
 # Plotting function with Plotly for beautiful and interactive charts
-def plot_trade_signal_graph(entry_price, stop_loss, take_profit, lot_size, trade_type):
+def plot_trade_signal_graph(entry_price, stop_loss, take_profit, lot_size, trade_type, signal_strength):
     try:
         fig = go.Figure()
 
@@ -92,11 +110,11 @@ def plot_trade_signal_graph(entry_price, stop_loss, take_profit, lot_size, trade
             line=dict(color='blue', dash='dash')
         ))
 
-        # Add annotation for Lot Size
+        # Add annotation for Lot Size and Signal Strength
         fig.add_annotation(
             x=datetime.now(),
             y=(entry_price + stop_loss) / 2,
-            text=f"Lot Size: {lot_size} ({trade_type})",
+            text=f"Lot Size: {lot_size} ({trade_type}, {signal_strength})",
             showarrow=True,
             arrowhead=2,
             ax=-100,
@@ -119,7 +137,7 @@ def plot_trade_signal_graph(entry_price, stop_loss, take_profit, lot_size, trade
         st.error(f"Error generating graph: {e}")
 
 # Function to execute a trade and store in trade history
-def execute_trade(entry_price, stop_loss, take_profit, lot_size, trade_type):
+def execute_trade(entry_price, stop_loss, take_profit, lot_size, trade_type, signal_strength):
     trade_data = {
         "Currency Pair": selected_pair,
         "Entry Price": entry_price,
@@ -129,6 +147,7 @@ def execute_trade(entry_price, stop_loss, take_profit, lot_size, trade_type):
         "Risk %": risk_percentage,
         "Reward Ratio": risk_reward_ratio,
         "Trade Type": trade_type,
+        "Signal Strength": signal_strength,
         "Date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     }
     # Using pd.concat() instead of append
@@ -149,19 +168,23 @@ if not data.empty:
         # Determine Buy or Sell
         trade_type = "Buy" if take_profit > entry_price else "Sell"
 
+        # Calculate signal strength
+        signal_strength = calculate_signal_strength(data)
+
         # Calculate lot size based on user inputs
         lot_size = calculate_lot_size(account_balance, risk_percentage, entry_price, stop_loss)
 
         # Display trade details
         st.markdown("### 📊 Trade Signal")
         st.write(f"**Trade Type**: {trade_type}")  # Show Buy or Sell
+        st.write(f"**Signal Strength**: {signal_strength}")  # Signal strength
         st.write(f"**Entry Price**: {entry_price}")
         st.write(f"**Stop Loss**: {stop_loss}")
         st.write(f"**Take Profit**: {take_profit}")
         st.write(f"**Lot Size**: {lot_size}")
 
         # Plot the trade signal graph
-        plot_trade_signal_graph(entry_price, stop_loss, take_profit, lot_size, trade_type)
+        plot_trade_signal_graph(entry_price, stop_loss, take_profit, lot_size, trade_type, signal_strength)
 
         # Display details
         st.markdown("### 📈 Trade Details")
@@ -171,7 +194,7 @@ if not data.empty:
 
         # Add Execute Trade button
         if st.button("Execute Trade"):
-            execute_trade(entry_price, stop_loss, take_profit, lot_size, trade_type)
+            execute_trade(entry_price, stop_loss, take_profit, lot_size, trade_type, signal_strength)
             st.success("Trade executed successfully!")
 
     except Exception as e:
