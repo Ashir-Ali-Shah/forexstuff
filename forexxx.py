@@ -3,15 +3,14 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 from datetime import datetime
+from forex_python.converter import CurrencyRates
 import yfinance as yf
-import joblib
-import os
 
 # Set page config
-st.set_page_config(page_title="Forex Trade Signal Generator", page_icon="📈", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="Forex Trade Signal Generator", page_icon="\ud83d\udcc8", layout="wide", initial_sidebar_state="expanded")
 
 # App title
-st.markdown("# 📈 Forex Trade Signal Generator")
+st.markdown("# \ud83d\udcc8 Forex Trade Signal Generator")
 
 # Currency Pair Selection
 currency_pairs = {
@@ -32,24 +31,21 @@ account_balance = st.sidebar.number_input("💰 Account Balance (USD)", min_valu
 risk_percentage = st.sidebar.slider("📉 Risk Percentage (%)", min_value=0.0, max_value=10.0, value=2.0, step=0.1)
 risk_reward_ratio = st.sidebar.slider("🎯 Risk/Reward Ratio", min_value=1.0, max_value=5.0, value=2.0, step=0.1)
 
-# Load ARIMA model
-@st.cache_resource
-def load_arima_model(file_path):
-    if not os.path.exists(file_path):
-        st.error(f"Model file not found: {file_path}")
-        return None
-    try:
-        return joblib.load(file_path)
-    except Exception as e:
-        st.error(f"Error loading ARIMA model: {e}")
-        return None
-
-arima_model = load_arima_model('arima_forex_model.pkl')
+# Forex Statistics
+st.markdown("## 📊 Forex Statistics")
+currency_rates = CurrencyRates()
+try:
+    base_currency = selected_pair[:3]
+    quote_currency = selected_pair[3:]
+    forex_rate = currency_rates.get_rate(base_currency, quote_currency)
+    st.write(f"💱 **Exchange Rate ({base_currency}/{quote_currency})**: {forex_rate}")
+except Exception as e:
+    st.error(f"Error fetching Forex rate: {e}")
 
 # Fetch forex data from Yahoo Finance
 def fetch_forex_data(pair):
     try:
-        data = yf.download(tickers=pair, period="5d", interval="15m", progress=False)
+        data = yf.download(tickers=pair, period="30d", interval="1h", progress=False)
         if data.empty:
             raise ValueError(f"No data fetched for {pair}")
         data.reset_index(inplace=True)
@@ -60,7 +56,7 @@ def fetch_forex_data(pair):
         st.error(f"Error fetching forex data: {e}")
         return pd.DataFrame()
 
-# Calculate signal strength based on recent volatility
+# Calculate signal strength
 def calculate_signal_strength(data):
     try:
         if data.empty or len(data["close"]) < 10:
@@ -90,37 +86,6 @@ def calculate_lot_size(balance, risk_percent, entry_price, stop_loss):
         st.error(f"Error calculating lot size: {e}")
         return 0
 
-# Plot trade signal graph
-def plot_trade_signal_graph(entry_price, stop_loss, take_profit, lot_size, trade_type, signal_strength):
-    try:
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(x=[datetime.now()], y=[entry_price], mode='markers', name='Entry Price', marker=dict(color='green', size=12)))
-        fig.add_trace(go.Scatter(x=[datetime.now(), datetime.now()], y=[stop_loss, stop_loss], mode='lines', name='Stop Loss', line=dict(color='red', dash='dash')))
-        fig.add_trace(go.Scatter(x=[datetime.now(), datetime.now()], y=[take_profit, take_profit], mode='lines', name='Take Profit', line=dict(color='blue', dash='dash')))
-        fig.add_annotation(x=datetime.now(), y=(entry_price + stop_loss) / 2, text=f"Lot Size: {lot_size} ({trade_type}, {signal_strength})", showarrow=True, arrowhead=2, ax=-100, ay=-100, font=dict(size=12, color="black"))
-        fig.update_layout(title=f"Trade Signal for {selected_pair}", xaxis_title="Date", yaxis_title="Price", showlegend=True, template="plotly_white")
-        st.plotly_chart(fig)
-    except Exception as e:
-        st.error(f"Error generating graph: {e}")
-
-# Execute Trade
-def execute_trade(entry_price, stop_loss, take_profit, lot_size, trade_type, signal_strength):
-    trade_data = {
-        "Currency Pair": selected_pair,
-        "Entry Price": entry_price,
-        "Stop Loss": stop_loss,
-        "Take Profit": take_profit,
-        "Lot Size": lot_size,
-        "Risk %": risk_percentage,
-        "Reward Ratio": risk_reward_ratio,
-        "Trade Type": trade_type,
-        "Signal Strength": signal_strength,
-        "Date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    }
-    if 'trade_history' not in st.session_state:
-        st.session_state.trade_history = pd.DataFrame(columns=trade_data.keys())
-    st.session_state.trade_history = pd.concat([st.session_state.trade_history, pd.DataFrame([trade_data])], ignore_index=True)
-
 # Main Execution
 ticker_symbol = currency_pairs[selected_pair]
 data = fetch_forex_data(ticker_symbol)
@@ -142,44 +107,9 @@ if not data.empty:
         st.write(f"**Take Profit**: {take_profit}")
         st.write(f"**Lot Size**: {lot_size}")
 
-        plot_trade_signal_graph(entry_price, stop_loss, take_profit, lot_size, trade_type, signal_strength)
-
-        if st.button("Execute Trade"):
-            execute_trade(entry_price, stop_loss, take_profit, lot_size, trade_type, signal_strength)
-            st.success("Trade executed successfully!")
-
     except Exception as e:
         st.error(f"An error occurred: {e}")
-else:
-    st.error("Failed to fetch data for the selected pair.")
 
 if 'trade_history' in st.session_state and not st.session_state.trade_history.empty:
     st.markdown("### 📜 Trade History")
     st.dataframe(st.session_state.trade_history)
-else:
-    st.markdown("### 📜 Trade History is empty. Execute a trade to see the history.")
-
-# Forex Price Forecasting using ARIMA
-st.markdown("## 🔮 Forex Price Forecasting")
-st.markdown("### Predict Future Closing Prices")
-
-forecast_days = st.slider("📅 Select Forecast Horizon (Days)", min_value=1, max_value=30, value=7)
-
-if arima_model:
-    try:
-        future_forecast = arima_model.forecast(steps=forecast_days)
-        future_dates = pd.date_range(start=datetime.now(), periods=forecast_days, freq='D')
-        forecast_df = pd.DataFrame({"Date": future_dates, "Predicted Close": future_forecast})
-
-        st.markdown("### 📊 Predicted Closing Prices")
-        st.dataframe(forecast_df)
-
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(x=future_dates, y=future_forecast, mode='lines+markers', name='Predicted Close', line=dict(color='blue')))
-        fig.update_layout(title="Forex Price Forecast", xaxis_title="Date", yaxis_title="Price", showlegend=True, template="plotly_white")
-        st.plotly_chart(fig)
-
-    except Exception as e:
-        st.error(f"Error generating forecast: {e}")
-else:
-    st.error("ARIMA model is not loaded.")
