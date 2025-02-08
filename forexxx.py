@@ -7,7 +7,7 @@ from forex_python.converter import CurrencyRates
 import yfinance as yf
 
 # Set page config
-st.set_page_config(page_title="Forex Trade Signal Generator", page_icon="\ud83d\udcc8", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="Forex Trade Signal Generator", page_icon="", layout="wide", initial_sidebar_state="expanded")
 
 # App title
 st.markdown("# \ud83d\udcc8 Forex Trade Signal Generator")
