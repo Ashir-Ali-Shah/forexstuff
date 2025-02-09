@@ -1,27 +1,20 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import plotly.graph_objects as go
+import matplotlib.pyplot as plt
+import joblib
 from datetime import datetime
-from forex_python.converter import CurrencyRates
-import yfinance as yf
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import mean_absolute_error, mean_squared_error
 
-# Set page config
-st.set_page_config(page_title="Forex Trade Signal Generator", page_icon="", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="Forex Trade Signal Generator", layout="wide")
+st.markdown("# 📈 Forex Trade Signal Generator")
 
-# App title
-st.markdown("# \ud83d\udcc8 Forex Trade Signal Generator")
-
-# Currency Pair Selection
 currency_pairs = {
-    "XAUUSD": "GLD",
-    "EURUSD": "EURUSD=X",
-    "GBPUSD": "GBPUSD=X",
-    "USDJPY": "USDJPY=X",
-    "AUDUSD": "AUDUSD=X",
-    "NZDUSD": "NZDUSD=X",
-    "USDCAD": "USDCAD=X",
-    "USDCHF": "USDCHF=X",
+    "XAUUSD": "XAUUSD1.csv",
+    "EURUSD": "EURUSD1.csv",
 }
 
 # Sidebar
@@ -31,85 +24,112 @@ account_balance = st.sidebar.number_input("💰 Account Balance (USD)", min_valu
 risk_percentage = st.sidebar.slider("📉 Risk Percentage (%)", min_value=0.0, max_value=10.0, value=2.0, step=0.1)
 risk_reward_ratio = st.sidebar.slider("🎯 Risk/Reward Ratio", min_value=1.0, max_value=5.0, value=2.0, step=0.1)
 
-# Forex Statistics
-st.markdown("## 📊 Forex Statistics")
-currency_rates = CurrencyRates()
-try:
-    base_currency = selected_pair[:3]
-    quote_currency = selected_pair[3:]
-    forex_rate = currency_rates.get_rate(base_currency, quote_currency)
-    st.write(f"💱 **Exchange Rate ({base_currency}/{quote_currency})**: {forex_rate}")
-except Exception as e:
-    st.error(f"Error fetching Forex rate: {e}")
+st.markdown(f"### ⚙️ Selected Settings")
+st.markdown(f"**Currency Pair:** {selected_pair}")
+st.markdown(f"**Account Balance:** ${account_balance}")
+st.markdown(f"**Risk Percentage:** {risk_percentage}%")
+st.markdown(f"**Risk/Reward Ratio:** {risk_reward_ratio}")
 
-# Fetch forex data from Yahoo Finance
-def fetch_forex_data(pair):
-    try:
-        data = yf.download(tickers=pair, period="30d", interval="1h", progress=False)
-        if data.empty:
-            raise ValueError(f"No data fetched for {pair}")
-        data.reset_index(inplace=True)
-        data.rename(columns={"Datetime": "datetime", "Open": "open", "High": "high", "Low": "low", "Close": "close"}, inplace=True)
-        data.set_index("datetime", inplace=True)
-        return data
-    except Exception as e:
-        st.error(f"Error fetching forex data: {e}")
-        return pd.DataFrame()
+file_path = currency_pairs[selected_pair]
+data = pd.read_csv(file_path, delimiter="\t", header=None)
+data.columns = ["DateTime", "Open", "High", "Low", "Close", "Volume"]
+data["DateTime"] = pd.to_datetime(data["DateTime"])
+data["month"] = data["DateTime"].dt.strftime('%B')
+data[["Open", "High", "Low", "Close", "Volume"]] = data[["Open", "High", "Low", "Close", "Volume"]].apply(pd.to_numeric)
 
-# Calculate signal strength
-def calculate_signal_strength(data):
-    try:
-        if data.empty or len(data["close"]) < 10:
-            return "Unknown"
-        recent_closes = data["close"].tail(10)
-        volatility = np.std(recent_closes)
-        if volatility < 0.5:
-            return "Strong"
-        elif volatility < 1.0:
-            return "Moderate"
-        else:
-            return "Weak"
-    except Exception as e:
-        st.error(f"Error calculating signal strength: {e}")
-        return "Unknown"
-
-# Lot Size Calculation
-def calculate_lot_size(balance, risk_percent, entry_price, stop_loss):
+# Lot Size Calculation (Adjusted for Risk/Reward Ratio)
+def calculate_lot_size(balance, risk_percent, risk_reward_ratio, entry_price, stop_loss, pair):
     try:
         risk_amount = balance * (risk_percent / 100)
         pip_risk = abs(entry_price - stop_loss)
         if pip_risk == 0:
             return 0
-        lot_size = risk_amount / pip_risk
+        
+        if pair == "EURUSD":
+            lot_size = (risk_amount / pip_risk) * 100000  # Corrected lot size formula for EURUSD
+        elif pair == "XAUUSD":
+            pip_value = 10  # Standard pip value for XAUUSD in USD
+            lot_size = risk_amount / (pip_risk * pip_value)  # Corrected lot size formula for XAUUSD
+        else:
+            lot_size = 0
+        
         return round(lot_size, 2)
     except Exception as e:
         st.error(f"Error calculating lot size: {e}")
         return 0
 
-# Main Execution
-ticker_symbol = currency_pairs[selected_pair]
-data = fetch_forex_data(ticker_symbol)
+# Feature Engineering
+def create_lagged_features(df, lags=2):
+    for i in range(1, lags + 1):
+        df[f'Close_Lag_{i}'] = df['Close'].shift(i)
+    df.dropna(inplace=True)
+    return df
 
-if not data.empty:
-    try:
-        entry_price = data["close"].iloc[-1]
-        stop_loss = entry_price - 2
-        take_profit = entry_price + (2 * risk_reward_ratio)
-        trade_type = "Buy" if take_profit > entry_price else "Sell"
-        signal_strength = calculate_signal_strength(data)
-        lot_size = calculate_lot_size(account_balance, risk_percentage, entry_price, stop_loss)
+data = create_lagged_features(data)
+features = [col for col in data.columns if 'Close_Lag' in col]
+target = 'Close'
 
-        st.markdown("### 📊 Trade Signal")
-        st.write(f"**Trade Type**: {trade_type}")
-        st.write(f"**Signal Strength**: {signal_strength}")
-        st.write(f"**Entry Price**: {entry_price}")
-        st.write(f"**Stop Loss**: {stop_loss}")
-        st.write(f"**Take Profit**: {take_profit}")
-        st.write(f"**Lot Size**: {lot_size}")
+scaler = MinMaxScaler()
+data[features] = scaler.fit_transform(data[features])
 
-    except Exception as e:
-        st.error(f"An error occurred: {e}")
+data_sample = data.tail(20000).copy()
+train_size = int(len(data_sample) * 0.8)
+train, test = data_sample.iloc[:train_size], data_sample.iloc[train_size:]
 
-if 'trade_history' in st.session_state and not st.session_state.trade_history.empty:
-    st.markdown("### 📜 Trade History")
-    st.dataframe(st.session_state.trade_history)
+X_train, y_train = train[features], train[target]
+X_test, y_test = test[features], test[target]
+
+model = LinearRegression()
+model.fit(X_train, y_train)
+
+y_pred = model.predict(X_test)
+
+def predict_closing_price(input_values):
+    input_values = np.array(input_values).reshape(1, -1)
+    input_values = scaler.transform(input_values)
+    prediction = model.predict(input_values)
+    return prediction[0]
+
+# Predict Closing Price for Both Currencies
+st.markdown(f"## 📈 Predict Closing Price for {selected_pair}")
+close_lag_1 = st.number_input(f"Enter Last Closing Price for {selected_pair}", value=0.0, step=0.01, key=f"{selected_pair}_lag_1")
+close_lag_2 = st.number_input(f"Enter Second Last Closing Price for {selected_pair}", value=0.0, step=0.01, key=f"{selected_pair}_lag_2")
+
+if st.button(f"Predict {selected_pair} Closing Price"):
+    if close_lag_1 and close_lag_2:
+        predicted_price = predict_closing_price([close_lag_1, close_lag_2])
+        st.success(f"Predicted Closing Price for {selected_pair}: {predicted_price}")
+    else:
+        st.error("Please enter both closing prices.")
+
+# Calculate and Display Lot Size for Both Currencies
+entry_price = data["Close"].iloc[-1]
+stop_loss = entry_price - 2
+take_profit = entry_price + (2 * risk_reward_ratio)
+lot_size = calculate_lot_size(account_balance, risk_percentage, risk_reward_ratio, entry_price, stop_loss, selected_pair)
+
+st.markdown(f"## 💰 Calculated Lot Size for {selected_pair}: {lot_size}")
+
+# Execute Trade
+if st.button("Execute Trade"):
+    trade_data = {
+        "Currency Pair": selected_pair,
+        "Entry Price": entry_price,
+        "Stop Loss": stop_loss,
+        "Take Profit": take_profit,
+        "Lot Size": lot_size,
+    }
+    trade_df = pd.DataFrame([trade_data])
+    st.markdown("### 📜 Trade Execution Details")
+    st.dataframe(trade_df)
+
+# Dark Themed Graphs
+plt.style.use('dark_background')
+st.markdown(f"### 📉 Close Price Over Time ({selected_pair})")
+fig, ax = plt.subplots(figsize=(6, 4))
+ax.plot(data["month"], data["Close"], label="Close Price", alpha=0.8, color="lightblue")
+ax.set_title(f"Close Price Over Time - {selected_pair}")
+ax.set_xlabel("Month")
+ax.set_ylabel("Close Price")
+ax.legend()
+st.pyplot(fig)
