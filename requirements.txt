@@ -4,3 +4,5 @@ numpy
 plotly
 forex-python
 yfinance
+matplotlib
+scikit-learn
