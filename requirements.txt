@@ -1,9 +1,7 @@
 streamlit
 pandas
 numpy
-plotly
-forex-python
-yfinance
 matplotlib
 scikit-learn
+joblib
 TA-Lib
