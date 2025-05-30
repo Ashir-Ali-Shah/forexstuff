@@ -6,3 +6,4 @@ forex-python
 yfinance
 matplotlib
 scikit-learn
+TA-Lib
